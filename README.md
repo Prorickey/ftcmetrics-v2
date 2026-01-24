@@ -1,16 +1,49 @@
 # FTC Metrics v2
 
-A scouting and analytics platform for FIRST Tech Challenge (FTC) teams. Enables teams to collect match data from scouts, fetches official statistics from the FTC Events API, and computes advanced analytics (EPA/OPR) to understand team performance.
+A scouting and analytics platform for FIRST Tech Challenge (FTC) teams. Enables teams to collect match data from scouts, fetches official statistics from the FTC Events API, and computes advanced analytics (EPA/OPR) with match predictions.
 
-## Current Status
+## Project Decisions
 
-The project currently runs on a **Python/Flask backend** with Jinja2 templates and is being migrated to a modern TypeScript stack.
+### Season Focus
+- **Current Season Only**: DECODE (2025-2026 FTC game)
+- No historical season support
 
-**Target Stack:**
-- Frontend: Next.js with TypeScript
-- Backend: Convex (serverless backend)
-- Database: Prisma ORM
-- Styling: Tailwind CSS
+### Technology Stack
+
+| Component | Choice | Notes |
+|-----------|--------|-------|
+| **Frontend** | Next.js + TypeScript | PWA for offline scouting |
+| **Backend** | Convex (primary) | See alternatives below |
+| **Database** | PostgreSQL + Prisma | Production-ready, scalable |
+| **Styling** | Tailwind CSS | Utility-first CSS |
+| **Auth** | OAuth only | Google, Discord, GitHub (expandable) |
+
+### Backend Alternatives to Convex
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **Convex** | Real-time built-in, serverless, type-safe | Vendor lock-in, self-hosting complex |
+| **Supabase** | PostgreSQL native, real-time, self-hostable | More setup for type safety |
+| **tRPC + Prisma** | Full control, type-safe, easy self-hosting | Manual real-time implementation |
+| **Hono + Prisma** | Lightweight, edge-ready, Docker-friendly | No built-in real-time |
+
+### Authentication
+- **OAuth providers**: Google, Discord, GitHub (more to be added)
+- **No email/password**: OAuth handles verification
+- **Multi-team membership**: Users can belong to multiple FTC teams
+
+### Team Model
+- Team object represents an **FTC team** (not just a scouting group)
+- User roles: **Mentor** or **Member**
+- Scouting data: **Shareable** (team's choice to make public or private)
+
+### Deployment & Scale
+- **Self-hosted** in Docker containers
+- **Kubernetes-ready** for scaling to all of FTC
+- **Open source** with centralized hosted service available
+
+### MVP Requirements
+All features must be usable in MVP - no phased feature releases.
 
 ---
 
@@ -20,96 +53,96 @@ The project currently runs on a **Python/Flask backend** with Jinja2 templates a
 
 - [ ] Initialize Next.js project with TypeScript
 - [ ] Configure Tailwind CSS
-- [ ] Set up Prisma ORM with database schema
-- [ ] Configure Convex backend
+- [ ] Set up PostgreSQL database
+- [ ] Configure Prisma ORM
+- [ ] Set up Convex backend (or chosen alternative)
+- [ ] Configure PWA with service worker for offline support
 - [ ] Set up ESLint and Prettier
-- [ ] Create environment variable configuration (.env)
-- [ ] Set up Docker configuration for deployment
-- [ ] Configure CI/CD pipeline
+- [ ] Create Docker configuration
+- [ ] Create Kubernetes manifests (Deployment, Service, ConfigMap, Secrets)
+- [ ] Configure CI/CD pipeline with GitHub Actions
 
-### Phase 2: Database & Schema Migration
+### Phase 2: Database Schema
 
-- [ ] Design Prisma schema based on current SQLite schema
-  - [ ] `User` model (id, email, password hash, salt, created_at)
-  - [ ] `Team` model (id, name, code, created_at)
-  - [ ] `TeamMember` model (user_id, team_id, role, notes)
-  - [ ] `ScoutingMatchData` model (Into The Deep game fields)
+- [ ] Design Prisma schema:
+  - [ ] `User` model (id, email, name, avatar, oauth_provider, created_at)
+  - [ ] `Team` model (id, team_number, name, sharing_enabled, created_at)
+  - [ ] `TeamMember` model (user_id, team_id, role: mentor|member, joined_at)
+  - [ ] `ScoutingMatchData` model (DECODE game-specific fields)
   - [ ] `Match` model (official FTC match data)
   - [ ] `Score` model (official match scores)
   - [ ] `Schedule` model (event schedules)
+  - [ ] `EPAHistory` model (track EPA over time)
 - [ ] Create database migrations
 - [ ] Implement seed data for development
-- [ ] Set up database connection pooling
 
 ### Phase 3: Authentication System
 
-- [ ] Implement user registration
-  - [ ] Email/password validation
-  - [ ] Password hashing with secure algorithm (bcrypt/argon2)
-  - [ ] Email verification (optional)
-- [ ] Implement user login
-  - [ ] Session/JWT token management
-  - [ ] Secure cookie handling
-- [ ] Implement logout functionality
-- [ ] Create authentication middleware/guards
-- [ ] Add protected route handling
-- [ ] Consider OAuth providers (Google, Discord) for easier login
+- [ ] Set up NextAuth.js / Auth.js
+- [ ] Configure OAuth providers:
+  - [ ] Google OAuth
+  - [ ] Discord OAuth
+  - [ ] GitHub OAuth
+- [ ] Create authentication middleware
+- [ ] Implement protected routes
+- [ ] Design extensible provider system for future additions
+- [ ] Handle user profile creation on first login
 
 ### Phase 4: Team Management
 
-- [ ] Create team creation flow
-  - [ ] Generate unique team join codes
-  - [ ] Team name validation
-- [ ] Implement team joining via code
-- [ ] Implement team leaving functionality
-- [ ] Build team administration features
-  - [ ] View team members
-  - [ ] Remove members (admin only)
-  - [ ] Promote members to admin (admin only)
-  - [ ] Update team settings (admin only)
-- [ ] Add team notes/collaboration features
-- [ ] Create team dashboard page
+- [ ] Link teams to official FTC team numbers
+- [ ] Implement team creation (claim FTC team number)
+- [ ] Create team invitation system (invite links/codes)
+- [ ] Implement role management:
+  - [ ] Mentor role (full admin)
+  - [ ] Member role (scout access)
+- [ ] Allow users to join multiple teams
+- [ ] Build team settings page:
+  - [ ] Toggle scouting data sharing (public/private)
+  - [ ] Manage members and roles
+- [ ] Create team dashboard
 
 ### Phase 5: FTC Events API Integration
 
 - [ ] Create FTC Events API client
   - [ ] Basic auth with API credentials
   - [ ] Base URL: `https://ftc-api.firstinspires.org/v2.0`
+  - [ ] Season: 2025 (DECODE)
 - [ ] Implement API endpoints:
-  - [ ] Fetch events list for a season
+  - [ ] Fetch events list for season
   - [ ] Fetch event details
   - [ ] Fetch match schedule
   - [ ] Fetch match results/scores
   - [ ] Fetch team information
-- [ ] Add response caching to reduce API calls
+- [ ] Add response caching (Redis or in-memory)
 - [ ] Create TypeScript types for all API responses
-- [ ] Handle rate limiting and errors gracefully
+- [ ] Handle rate limiting and errors
 - [ ] Background job for syncing match data
 
-### Phase 6: Scouting Interface
+### Phase 6: Scouting Interface (DECODE Game)
 
-- [ ] Design mobile-friendly scouting form
-- [ ] Implement interactive field view component
-  - [ ] Visual representation of FTC field
-  - [ ] Touch/click interactions for scoring
+- [ ] Design mobile-first scouting form
+- [ ] Implement interactive DECODE field view component
 - [ ] Create match phase management (Auto/Teleop/Endgame)
-- [ ] Implement "Into The Deep" game scoring fields:
-  - [ ] Auto phase: samples (high/low), specimens (high/low)
-  - [ ] Teleop phase: samples (high/low), specimens (high/low)
-  - [ ] Endgame: climb levels (observation zone, ascent levels)
-  - [ ] Additional points tracking
-- [ ] Add match data submission to backend
-- [ ] Real-time data sync with Convex
+- [ ] Implement DECODE-specific scoring fields:
+  - [ ] Auto phase scoring elements
+  - [ ] Teleop phase scoring elements
+  - [ ] Endgame/parking elements
+- [ ] PWA offline functionality:
+  - [ ] Cache scouting form
+  - [ ] Store submissions in IndexedDB
+  - [ ] Sync when back online
+- [ ] Real-time data sync
 - [ ] Match history view per team
-- [ ] Data export functionality (CSV/JSON)
+- [ ] Data export (CSV/JSON)
 
 ### Phase 7: Analytics - OPR (Offensive Power Rating)
 
-- [ ] Port OPR algorithm from Python to TypeScript
+- [ ] Port OPR algorithm to TypeScript
   - [ ] Use `ml-matrix` library for linear algebra
   - [ ] Implement pseudo-inverse matrix calculations
 - [ ] Create OPR calculation endpoint
-- [ ] Support multiple statistics:
+- [ ] Support DECODE-specific statistics:
   - [ ] Total score
   - [ ] Auto points
   - [ ] Teleop points
@@ -119,87 +152,103 @@ The project currently runs on a **Python/Flask backend** with Jinja2 templates a
   - [ ] Team rankings table
   - [ ] Comparison charts
   - [ ] Event-specific filtering
-- [ ] Add caching for computed OPR values
+- [ ] Add caching for computed values
 
 ### Phase 8: Analytics - EPA (Expected Points Added)
 
-- [ ] Port EPA algorithm from Python to TypeScript
+- [ ] Port EPA algorithm to TypeScript
   - [ ] Initialize with baseline average scores
-  - [ ] Implement incremental match-by-match updates
+  - [ ] Incremental match-by-match updates
 - [ ] Track EPA history over time
 - [ ] Create EPA calculation endpoint
-- [ ] Build EPA visualization dashboard
+- [ ] Build EPA visualization dashboard:
   - [ ] Team EPA rankings
   - [ ] EPA trend graphs over season
   - [ ] Team comparison tool
 - [ ] Historical EPA tracking per team
-- [ ] EPA predictions for upcoming matches
 
-### Phase 9: UI/UX Pages
+### Phase 9: Match Predictions
+
+- [ ] Implement prediction algorithm using EPA/OPR
+- [ ] Predict match outcomes (win probability)
+- [ ] Predict score ranges
+- [ ] Alliance selection recommendations
+- [ ] Event outcome predictions (playoff brackets)
+- [ ] Prediction accuracy tracking
+- [ ] Build predictions dashboard
+
+### Phase 10: UI/UX Pages
 
 - [ ] Homepage / Landing page
   - [ ] Feature overview
   - [ ] Quick access to scouting
-  - [ ] Recent activity feed
-- [ ] Login page with validation
-- [ ] Registration page with validation
+  - [ ] Live event feed
+- [ ] OAuth login page
 - [ ] Team dashboard
-  - [ ] Team overview
+  - [ ] Team overview with FTC team info
   - [ ] Member management
   - [ ] Scouting statistics
-- [ ] Scouting interface page
-- [ ] OPR analytics page
-  - [ ] Event selection
-  - [ ] Interactive data tables
-  - [ ] Charts and visualizations
-- [ ] EPA analytics page
-  - [ ] Team search
-  - [ ] Season rankings
-  - [ ] Historical trends
+  - [ ] Data sharing toggle
+- [ ] Scouting interface page (PWA-optimized)
+- [ ] Analytics pages:
+  - [ ] OPR dashboard with event selection
+  - [ ] EPA dashboard with rankings
+  - [ ] Match predictions page
 - [ ] Team explorer / search page
-- [ ] User profile/settings page
+- [ ] User profile page (manage team memberships)
 - [ ] 404 and error pages
 
-### Phase 10: Real-time Features (Convex)
+### Phase 11: Real-time Features
 
 - [ ] Live scouting data updates
 - [ ] Real-time team collaboration
 - [ ] Live match score tracking
-- [ ] Notification system for team events
-- [ ] Collaborative note-taking
+- [ ] Notification system
+- [ ] Collaborative notes
 
-### Phase 11: Testing
+### Phase 12: Testing
 
-- [ ] Set up Jest/Vitest for unit testing
-- [ ] Write tests for analytics algorithms (OPR/EPA)
+- [ ] Set up Vitest for unit testing
+- [ ] Write tests for analytics algorithms (OPR/EPA/Predictions)
 - [ ] Write tests for API routes
 - [ ] Write tests for authentication flows
-- [ ] Set up Playwright/Cypress for E2E testing
+- [ ] Set up Playwright for E2E testing
 - [ ] Create E2E tests for critical user flows
 - [ ] Add API integration tests for FTC Events API
+- [ ] Load testing for Kubernetes scaling
 
-### Phase 12: Documentation & Polish
+### Phase 13: Documentation & Polish
 
 - [ ] Write API documentation
 - [ ] Create user guide/tutorial
 - [ ] Add inline code documentation
-- [ ] Create contribution guidelines
+- [ ] Create contribution guidelines (CONTRIBUTING.md)
 - [ ] Performance optimization
   - [ ] Image optimization
   - [ ] Code splitting
   - [ ] Caching strategies
 - [ ] Accessibility audit (WCAG compliance)
 - [ ] Mobile responsiveness testing
+- [ ] PWA audit (Lighthouse)
 
-### Phase 13: Deployment
+### Phase 14: Deployment
 
-- [ ] Set up production database
-- [ ] Configure environment variables for production
-- [ ] Set up Vercel/hosting platform
+- [ ] Set up PostgreSQL in production
+- [ ] Configure environment variables
+- [ ] Build Docker image with multi-stage build
+- [ ] Create Kubernetes manifests:
+  - [ ] Deployment with resource limits
+  - [ ] Horizontal Pod Autoscaler
+  - [ ] Service (ClusterIP/LoadBalancer)
+  - [ ] Ingress with TLS
+  - [ ] ConfigMap and Secrets
+  - [ ] PersistentVolumeClaim for data
+- [ ] Set up Helm chart (optional)
+- [ ] Configure monitoring (Prometheus/Grafana)
+- [ ] Set up logging (ELK or Loki)
 - [ ] Configure custom domain
-- [ ] Set up monitoring and logging
-- [ ] Create backup strategy for data
-- [ ] Set up error tracking (Sentry or similar)
+- [ ] Set up error tracking (Sentry)
+- [ ] Create backup strategy (pg_dump cron)
 
 ---
 
@@ -222,7 +271,7 @@ python3 app.py  # Runs on http://0.0.0.0:8080
 
 - Base URL: `https://ftc-api.firstinspires.org/v2.0`
 - Register for credentials at: https://ftc-events.firstinspires.org/services/API
-- Current season: 2024 (2024-2025 "Into The Deep")
+- Current season: 2025 (DECODE)
 
 ## Contributing
 
