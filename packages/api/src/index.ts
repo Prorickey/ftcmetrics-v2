@@ -10,10 +10,13 @@ import userTeams from "./routes/user-teams";
 import scouting from "./routes/scouting";
 import analytics from "./routes/analytics";
 
+// Import middleware
+import { rateLimit, sanitizeInput } from "./middleware/auth";
+
 // Create the main app
 const app = new Hono();
 
-// Middleware
+// Global Middleware
 app.use("*", logger());
 app.use(
   "*",
@@ -22,6 +25,12 @@ app.use(
     credentials: true,
   })
 );
+
+// Rate limiting (100 requests per minute per user/IP)
+app.use("/api/*", rateLimit(100, 60000));
+
+// Input sanitization for JSON requests
+app.use("/api/*", sanitizeInput);
 
 // Health check
 app.get("/", (c) => {

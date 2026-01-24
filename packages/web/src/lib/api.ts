@@ -250,6 +250,17 @@ export const scoutingApi = {
 
     return fetchApi(`/api/scouting/notes?${params.toString()}`);
   },
+
+  getTeamStats: async (userId: string, teamId: string) => {
+    return fetchApi<{
+      matchesScouted: number;
+      eventsCount: number;
+      teamsScoutedCount: number;
+      notesCount: number;
+    }>(`/api/scouting/team-stats/${teamId}`, {
+      headers: { "X-User-Id": userId },
+    });
+  },
 };
 
 // Events API

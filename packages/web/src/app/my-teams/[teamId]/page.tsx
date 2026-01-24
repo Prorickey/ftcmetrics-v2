@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { teamsApi } from "@/lib/api";
+import { teamsApi, scoutingApi } from "@/lib/api";
 
 interface TeamMember {
   userId: string;
@@ -41,6 +41,12 @@ export default function TeamDetailPage() {
   const teamId = params.teamId as string;
 
   const [team, setTeam] = useState<TeamDetails | null>(null);
+  const [stats, setStats] = useState<{
+    matchesScouted: number;
+    eventsCount: number;
+    teamsScoutedCount: number;
+    notesCount: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -61,11 +67,19 @@ export default function TeamDetailPage() {
     if (!session?.user?.id) return;
 
     try {
-      const result = await teamsApi.getTeam(session.user.id, teamId);
-      if (result.success && result.data) {
-        setTeam(result.data);
+      const [teamResult, statsResult] = await Promise.all([
+        teamsApi.getTeam(session.user.id, teamId),
+        scoutingApi.getTeamStats(session.user.id, teamId),
+      ]);
+
+      if (teamResult.success && teamResult.data) {
+        setTeam(teamResult.data);
       } else {
-        setError(result.error || "Failed to load team");
+        setError(teamResult.error || "Failed to load team");
+      }
+
+      if (statsResult.success && statsResult.data) {
+        setStats(statsResult.data);
       }
     } catch (err) {
       setError("Failed to load team");
@@ -278,18 +292,22 @@ export default function TeamDetailPage() {
       {/* Quick Stats */}
       <div className="mt-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
         <h2 className="font-semibold text-lg mb-4">Team Stats</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <p className="text-2xl font-bold text-ftc-orange">{team.members.length}</p>
             <p className="text-sm text-gray-600 dark:text-gray-400">Members</p>
           </div>
           <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <p className="text-2xl font-bold text-ftc-blue">0</p>
+            <p className="text-2xl font-bold text-ftc-blue">{stats?.matchesScouted ?? 0}</p>
             <p className="text-sm text-gray-600 dark:text-gray-400">Matches Scouted</p>
           </div>
           <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <p className="text-2xl font-bold text-green-500">0</p>
+            <p className="text-2xl font-bold text-green-500">{stats?.eventsCount ?? 0}</p>
             <p className="text-sm text-gray-600 dark:text-gray-400">Events</p>
+          </div>
+          <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <p className="text-2xl font-bold text-yellow-500">{stats?.teamsScoutedCount ?? 0}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Teams Scouted</p>
           </div>
           <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <p className="text-2xl font-bold text-purple-500">

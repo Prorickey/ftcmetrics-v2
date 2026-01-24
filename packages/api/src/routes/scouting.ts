@@ -524,4 +524,69 @@ scouting.get("/team-summary/:teamNumber", async (c) => {
   }
 });
 
+/**
+ * GET /api/scouting/team-stats/:teamId
+ * Get scouting stats for a user's team (matches scouted, events, etc.)
+ */
+scouting.get("/team-stats/:teamId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const userId = c.req.header("X-User-Id");
+
+  if (!userId) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
+
+  try {
+    // Verify user is a member of the team
+    const membership = await prisma.teamMember.findUnique({
+      where: {
+        userId_teamId: { userId, teamId },
+      },
+    });
+
+    if (!membership) {
+      return c.json(
+        { success: false, error: "Not a member of this team" },
+        403
+      );
+    }
+
+    // Get scouting entries for this team
+    const entries = await prisma.scoutingEntry.findMany({
+      where: { scoutingTeamId: teamId },
+      select: {
+        eventCode: true,
+        matchNumber: true,
+        scoutedTeamId: true,
+      },
+    });
+
+    // Count unique events
+    const uniqueEvents = new Set(entries.map((e) => e.eventCode));
+    // Count unique scouted teams
+    const uniqueTeams = new Set(entries.map((e) => e.scoutedTeamId));
+
+    // Get scouting notes count
+    const notesCount = await prisma.scoutingNote.count({
+      where: { notingTeamId: teamId },
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        matchesScouted: entries.length,
+        eventsCount: uniqueEvents.size,
+        teamsScoutedCount: uniqueTeams.size,
+        notesCount,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching team stats:", error);
+    return c.json(
+      { success: false, error: "Failed to fetch team stats" },
+      500
+    );
+  }
+});
+
 export default scouting;

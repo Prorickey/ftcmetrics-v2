@@ -67,6 +67,70 @@ interface TeamEPAState {
 }
 
 /**
+ * Calculate dynamic baselines from match data
+ */
+function calculateBaselines(matches: MatchForEPA[]): {
+  totalScore: number;
+  autoScore: number;
+  teleopScore: number;
+  endgameScore: number;
+} {
+  if (matches.length === 0) {
+    return {
+      totalScore: DECODE_BASELINE.totalScore,
+      autoScore: DECODE_BASELINE.autoScore,
+      teleopScore: DECODE_BASELINE.teleopScore,
+      endgameScore: DECODE_BASELINE.endgameScore,
+    };
+  }
+
+  // Calculate average alliance scores from match data
+  let totalSum = 0;
+  let autoSum = 0;
+  let teleopSum = 0;
+  let endgameSum = 0;
+  let scoreCount = 0;
+  let componentCount = 0;
+
+  for (const match of matches) {
+    totalSum += match.redScore + match.blueScore;
+    scoreCount += 2; // 2 alliances
+
+    if (match.redAutoScore !== undefined) {
+      autoSum += (match.redAutoScore || 0) + (match.blueAutoScore || 0);
+      teleopSum += (match.redTeleopScore || 0) + (match.blueTeleopScore || 0);
+      endgameSum += (match.redEndgameScore || 0) + (match.blueEndgameScore || 0);
+      componentCount += 2;
+    }
+  }
+
+  const avgTotal = scoreCount > 0 ? totalSum / scoreCount : DECODE_BASELINE.totalScore;
+  const avgAuto = componentCount > 0 ? autoSum / componentCount : DECODE_BASELINE.autoScore;
+  const avgTeleop = componentCount > 0 ? teleopSum / componentCount : DECODE_BASELINE.teleopScore;
+  const avgEndgame = componentCount > 0 ? endgameSum / componentCount : DECODE_BASELINE.endgameScore;
+
+  return {
+    totalScore: avgTotal,
+    autoScore: avgAuto,
+    teleopScore: avgTeleop,
+    endgameScore: avgEndgame,
+  };
+}
+
+/**
+ * Calculate adaptive K-factor based on match count
+ * Higher K for early matches, lower K as data accumulates
+ */
+function getAdaptiveKFactor(matchCount: number): number {
+  // K starts at 0.4 for new teams and decreases to 0.1 for experienced teams
+  const minK = 0.1;
+  const maxK = 0.4;
+  const decayRate = 0.1;
+
+  return Math.max(minK, maxK * Math.exp(-decayRate * matchCount));
+}
+
+/**
  * Calculate EPA for all teams from chronologically ordered match results
  */
 export function calculateEPA(matches: MatchForEPA[]): Map<number, EPAResult> {
@@ -74,6 +138,15 @@ export function calculateEPA(matches: MatchForEPA[]): Map<number, EPAResult> {
   const sortedMatches = [...matches].sort(
     (a, b) => a.matchNumber - b.matchNumber
   );
+
+  // Calculate dynamic baselines from actual match data
+  const baselines = calculateBaselines(sortedMatches);
+  const perRobotBaseline = {
+    totalScore: baselines.totalScore / 2,
+    autoScore: baselines.autoScore / 2,
+    teleopScore: baselines.teleopScore / 2,
+    endgameScore: baselines.endgameScore / 2,
+  };
 
   // Initialize team EPA states
   const teamStates = new Map<number, TeamEPAState>();
@@ -105,13 +178,13 @@ export function calculateEPA(matches: MatchForEPA[]): Map<number, EPAResult> {
     const blue1 = teamStates.get(match.blueTeam1)!;
     const blue2 = teamStates.get(match.blueTeam2)!;
 
-    // Calculate expected scores
+    // Calculate expected scores using dynamic baselines
     const expectedRedScore =
-      DECODE_BASELINE.totalScore +
+      baselines.totalScore +
       (red1.totalEpa + red2.totalEpa) -
       (blue1.totalEpa + blue2.totalEpa) / 2;
     const expectedBlueScore =
-      DECODE_BASELINE.totalScore +
+      baselines.totalScore +
       (blue1.totalEpa + blue2.totalEpa) -
       (red1.totalEpa + red2.totalEpa) / 2;
 
@@ -129,26 +202,27 @@ export function calculateEPA(matches: MatchForEPA[]): Map<number, EPAResult> {
       endgameScore: number | undefined
     ) => {
       const teamDelta = delta / 2;
-      state.totalEpa += K_FACTOR * teamDelta;
+      // Use adaptive K-factor based on team's match experience
+      const kFactor = getAdaptiveKFactor(state.matchCount);
+      state.totalEpa += kFactor * teamDelta;
 
-      // Component EPA updates if available
+      // Component EPA updates if available (using dynamic baselines)
       if (autoScore !== undefined) {
-        const expectedAuto = PER_ROBOT_BASELINE.autoScore + state.autoEpa;
+        const expectedAuto = perRobotBaseline.autoScore + state.autoEpa;
         const autoDelta = autoScore / 2 - expectedAuto;
-        state.autoEpa += K_FACTOR * autoDelta;
+        state.autoEpa += kFactor * autoDelta;
       }
 
       if (teleopScore !== undefined) {
-        const expectedTeleop = PER_ROBOT_BASELINE.teleopScore + state.teleopEpa;
+        const expectedTeleop = perRobotBaseline.teleopScore + state.teleopEpa;
         const teleopDelta = teleopScore / 2 - expectedTeleop;
-        state.teleopEpa += K_FACTOR * teleopDelta;
+        state.teleopEpa += kFactor * teleopDelta;
       }
 
       if (endgameScore !== undefined) {
-        const expectedEndgame =
-          PER_ROBOT_BASELINE.endgameScore + state.endgameEpa;
+        const expectedEndgame = perRobotBaseline.endgameScore + state.endgameEpa;
         const endgameDelta = endgameScore / 2 - expectedEndgame;
-        state.endgameEpa += K_FACTOR * endgameDelta;
+        state.endgameEpa += kFactor * endgameDelta;
       }
 
       state.matchCount++;
@@ -251,7 +325,8 @@ export function predictMatch(
   redTeam1: number,
   redTeam2: number,
   blueTeam1: number,
-  blueTeam2: number
+  blueTeam2: number,
+  baselineScore?: number
 ): {
   predictedRedScore: number;
   predictedBlueScore: number;
@@ -262,8 +337,10 @@ export function predictMatch(
   const blue1Epa = teamEpas.get(blueTeam1)?.epa || 0;
   const blue2Epa = teamEpas.get(blueTeam2)?.epa || 0;
 
-  const redExpected = DECODE_BASELINE.totalScore + red1Epa + red2Epa;
-  const blueExpected = DECODE_BASELINE.totalScore + blue1Epa + blue2Epa;
+  // Use provided baseline or fall back to default
+  const baseline = baselineScore ?? DECODE_BASELINE.totalScore;
+  const redExpected = baseline + red1Epa + red2Epa;
+  const blueExpected = baseline + blue1Epa + blue2Epa;
 
   // Win probability using logistic function
   const scoreDiff = redExpected - blueExpected;
@@ -274,6 +351,15 @@ export function predictMatch(
     predictedBlueScore: Math.round(blueExpected),
     redWinProbability: Math.round(redWinProb * 100) / 100,
   };
+}
+
+/**
+ * Get calculated baselines from match data
+ * Useful for passing to predictMatch for accurate predictions
+ */
+export function getCalculatedBaseline(matches: MatchForEPA[]): number {
+  const baselines = calculateBaselines(matches);
+  return baselines.totalScore;
 }
 
 /**

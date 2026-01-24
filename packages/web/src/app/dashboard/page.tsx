@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import Link from "next/link";
+import { RecentActivity } from "./recent-activity";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -17,7 +18,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <Link
           href="/scout"
           className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-ftc-orange dark:hover:border-ftc-orange transition-colors group"
@@ -37,9 +38,34 @@ export default async function DashboardPage() {
               />
             </svg>
           </div>
-          <h3 className="font-semibold text-lg mb-1">Scout a Match</h3>
+          <h3 className="font-semibold text-lg mb-1">Scout Match</h3>
           <p className="text-gray-600 dark:text-gray-400 text-sm">
-            Record match data for teams at your event
+            Record match data
+          </p>
+        </Link>
+
+        <Link
+          href="/scout/notes"
+          className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-purple-500 dark:hover:border-purple-500 transition-colors group"
+        >
+          <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
+            <svg
+              className="w-6 h-6 text-purple-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
+          </div>
+          <h3 className="font-semibold text-lg mb-1">Team Notes</h3>
+          <p className="text-gray-600 dark:text-gray-400 text-sm">
+            Qualitative observations
           </p>
         </Link>
 
@@ -62,9 +88,9 @@ export default async function DashboardPage() {
               />
             </svg>
           </div>
-          <h3 className="font-semibold text-lg mb-1">View Analytics</h3>
+          <h3 className="font-semibold text-lg mb-1">Analytics</h3>
           <p className="text-gray-600 dark:text-gray-400 text-sm">
-            EPA, OPR rankings and match predictions
+            EPA & OPR rankings
           </p>
         </Link>
 
@@ -89,32 +115,13 @@ export default async function DashboardPage() {
           </div>
           <h3 className="font-semibold text-lg mb-1">My Teams</h3>
           <p className="text-gray-600 dark:text-gray-400 text-sm">
-            Manage your FTC teams and members
+            Manage teams
           </p>
         </Link>
       </div>
 
-      {/* Recent Activity Placeholder */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-        <h2 className="font-semibold text-lg mb-4">Recent Activity</h2>
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          <svg
-            className="w-12 h-12 mx-auto mb-3 opacity-50"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-            />
-          </svg>
-          <p>No recent activity</p>
-          <p className="text-sm mt-1">Start scouting matches to see activity here</p>
-        </div>
-      </div>
+      {/* Recent Activity */}
+      <RecentActivity />
     </div>
   );
 }

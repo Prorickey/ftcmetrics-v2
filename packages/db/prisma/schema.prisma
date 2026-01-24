@@ -108,6 +108,8 @@ model TeamMember {
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@unique([userId, teamId])
+  @@index([teamId])
+  @@index([userId])
   @@map("team_members")
 }
 
@@ -180,6 +182,11 @@ model Match {
   scoutingEntries ScoutingEntry[]
 
   @@unique([eventCode, tournamentLevel, matchNumber])
+  @@index([eventCode])
+  @@index([red1])
+  @@index([red2])
+  @@index([blue1])
+  @@index([blue2])
   @@map("matches")
 }
 
@@ -242,6 +249,13 @@ model ScoutingEntry {
   event        Event  @relation(fields: [eventCode], references: [eventCode], onDelete: Cascade)
   match        Match? @relation(fields: [matchId], references: [id], onDelete: SetNull)
 
+  // Indexes for common queries
+  @@index([eventCode])
+  @@index([scoutedTeamId])
+  @@index([scoutingTeamId])
+  @@index([scouterId])
+  @@index([eventCode, scoutedTeamId])
+  @@index([createdAt])
   @@map("scouting_entries")
 }
 
@@ -286,6 +300,11 @@ model ScoutingNote {
   aboutTeam  Team   @relation("NotedTeam", fields: [aboutTeamId], references: [id], onDelete: Cascade)
   event      Event? @relation(fields: [eventCode], references: [eventCode], onDelete: SetNull)
 
+  // Indexes for common queries
+  @@index([aboutTeamId])
+  @@index([notingTeamId])
+  @@index([eventCode])
+  @@index([createdAt])
   @@map("scouting_notes")
 }
 
