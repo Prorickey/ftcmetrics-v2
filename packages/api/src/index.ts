@@ -6,6 +6,9 @@ import { logger } from "hono/logger";
 // Import routes
 import events from "./routes/events";
 import teams from "./routes/teams";
+import userTeams from "./routes/user-teams";
+import scouting from "./routes/scouting";
+import analytics from "./routes/analytics";
 
 // Create the main app
 const app = new Hono();
@@ -37,6 +40,9 @@ app.get("/api/health", (c) => {
 // Mount routes
 app.route("/api/events", events);
 app.route("/api/teams", teams);
+app.route("/api/user-teams", userTeams);
+app.route("/api/scouting", scouting);
+app.route("/api/analytics", analytics);
 
 // Start server
 const port = parseInt(process.env.PORT || "3001", 10);
