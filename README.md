@@ -15,13 +15,14 @@ A scouting and analytics platform for FIRST Tech Challenge (FTC) teams. Enables 
 - **Real-Time Everything**: Live updates for scores, scouting, and analytics
 - **Useful Over Feature-Rich**: Every feature serves a clear purpose
 
-### Technology Stack
+### Technology Stack (Final)
 
 | Component | Choice | Notes |
 |-----------|--------|-------|
 | **Frontend** | Next.js + TypeScript | PWA for offline scouting |
-| **Backend** | TBD (see comparison below) | Real-time is critical |
+| **Backend API** | Hono | Lightweight, type-safe, edge-ready |
 | **Database** | PostgreSQL + Prisma | Production-ready, scalable |
+| **Real-time** | Soketi | Self-hosted Pusher-compatible WebSockets |
 | **Styling** | Tailwind CSS | Utility-first CSS |
 | **Auth** | OAuth only | Google, Discord, GitHub (expandable) |
 
@@ -150,69 +151,15 @@ If you prefer less custom code and accept some complexity, **Option C (Supabase)
 
 ---
 
-## Team Verification Options
+## Team Model (Simplified)
 
-Since teams represent official FTC teams, verification is important. Here are the options:
+For initial development, teams use an **open creation** model:
+- Any user can create a team with any FTC team number
+- First user to create becomes the owner (Mentor role)
+- Owners can invite others via invite codes
+- No verification required initially
 
-### Option 1: Open Claim + Dispute System
-```
-How it works:
-1. Any user can claim any unclaimed team number
-2. First user becomes the "owner"
-3. Other users can dispute the claim
-4. Disputes reviewed manually or by vote
-
-Pros: Simple, low friction
-Cons: Potential for squatting, requires moderation
-```
-
-### Option 2: Verification via FTC Events API
-```
-How it works:
-1. User enters team number
-2. System fetches team info from FTC API
-3. User must prove association (enter coach email, team location, etc.)
-4. Optional: email verification to coach listed in FIRST systems
-
-Pros: Leverages official data
-Cons: Coach emails not in public API, requires manual verification
-```
-
-### Option 3: Event-Based Verification
-```
-How it works:
-1. At events, generate unique verification codes
-2. Codes displayed on screens or distributed to teams
-3. Team members enter code to claim/join team
-
-Pros: In-person verification, hard to fake
-Cons: Only works at events, delays team setup
-```
-
-### Option 4: Invite-Only from Verified User (Recommended)
-```
-How it works:
-1. First user claims team (open claim)
-2. Platform marks team as "unverified"
-3. Platform admins can verify teams manually
-4. Verified mentors can invite members
-5. Unverified teams have limited features (can scout, can't share publicly)
-
-Pros: Balances accessibility with trust
-Cons: Requires some admin involvement
-```
-
-### Option 5: Integration with FIRST Dashboard (Future)
-```
-How it works:
-1. OAuth with FIRST account (if API becomes available)
-2. Automatic team association based on FIRST registration
-
-Pros: Authoritative, seamless
-Cons: FIRST doesn't currently offer OAuth API
-```
-
-**Recommendation**: Start with **Option 4** (Invite-Only with verification status). It allows teams to start using the platform immediately while building trust over time.
+**Future Enhancement**: Team verification can be added later if needed (see git history for options considered).
 
 ---
 
@@ -275,10 +222,9 @@ Data sources:
 - **No email/password**: OAuth handles verification
 - **Multi-team membership**: Users can belong to multiple FTC teams
 
-## Team Model
+## Team Roles
 - Team object represents an **FTC team** (not just a scouting group)
 - User roles: **Mentor** (full admin) or **Member** (scout access)
-- Verification status: **Verified** or **Unverified**
 - Scouting data sharing: **Private**, **Event-Only**, or **Public**
 
 ## Deployment & Scale
@@ -312,7 +258,7 @@ All features must be usable in MVP - no phased feature releases.
 
 - [ ] Design Prisma schema:
   - [ ] `User` model (id, email, name, avatar, oauth_provider, created_at)
-  - [ ] `Team` model (id, team_number, name, verified, sharing_level, created_at)
+  - [ ] `Team` model (id, team_number, name, sharing_level, created_at)
   - [ ] `TeamMember` model (user_id, team_id, role: mentor|member, joined_at)
   - [ ] `TeamInvite` model (team_id, code, expires_at, created_by)
   - [ ] `ScoutingEntry` model (quantitative DECODE fields + metadata)
@@ -338,11 +284,10 @@ All features must be usable in MVP - no phased feature releases.
 
 ### Phase 4: Team Management
 
-- [ ] Implement team claiming (link to FTC team number)
-- [ ] Add verification status (verified/unverified)
+- [ ] Implement team creation (link to FTC team number)
 - [ ] Create team invitation system (invite codes with expiry)
 - [ ] Implement role management:
-  - [ ] Mentor role (full admin, can verify)
+  - [ ] Mentor role (full admin)
   - [ ] Member role (scout access)
 - [ ] Allow users to join multiple teams
 - [ ] Build team settings page:
