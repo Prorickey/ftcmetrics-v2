@@ -1,0 +1,59 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: ftcmetrics-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ftcmetrics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ftcmetrics}
+      POSTGRES_DB: ${POSTGRES_DB:-ftcmetrics}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ftcmetrics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (for caching and sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: ftcmetrics-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Soketi (WebSocket server - Pusher compatible)
+  soketi:
+    image: quay.io/soketi/soketi:1.6-16-debian
+    container_name: ftcmetrics-soketi
+    restart: unless-stopped
+    environment:
+      SOKETI_DEBUG: "1"
+      SOKETI_DEFAULT_APP_ID: ${SOKETI_APP_ID:-ftcmetrics}
+      SOKETI_DEFAULT_APP_KEY: ${SOKETI_APP_KEY:-ftcmetrics-key}
+      SOKETI_DEFAULT_APP_SECRET: ${SOKETI_APP_SECRET:-ftcmetrics-secret}
+    ports:
+      - "6001:6001"
+      - "9601:9601"  # Metrics
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6001"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

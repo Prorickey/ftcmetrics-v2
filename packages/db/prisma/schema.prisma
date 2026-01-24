@@ -1,0 +1,274 @@
+// FTC Metrics v2 Database Schema
+// DECODE 2025-2026 Season
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER & AUTHENTICATION
+// ============================================================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  avatar        String?
+  oauthProvider String   @map("oauth_provider") // google, discord, github
+  oauthId       String   @map("oauth_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  teamMemberships TeamMember[]
+  scoutingEntries ScoutingEntry[]
+  scoutingNotes   ScoutingNote[]
+  createdInvites  TeamInvite[]
+
+  @@unique([oauthProvider, oauthId])
+  @@map("users")
+}
+
+// ============================================================================
+// TEAMS
+// ============================================================================
+
+model Team {
+  id           String       @id @default(cuid())
+  teamNumber   Int          @unique @map("team_number")
+  name         String
+  sharingLevel SharingLevel @default(PRIVATE) @map("sharing_level")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  members         TeamMember[]
+  invites         TeamInvite[]
+  scoutingEntries ScoutingEntry[] @relation("ScoutingTeam")
+  scoutedEntries  ScoutingEntry[] @relation("ScoutedTeam")
+  scoutingNotes   ScoutingNote[]  @relation("NotingTeam")
+  notesAbout      ScoutingNote[]  @relation("NotedTeam")
+
+  @@map("teams")
+}
+
+enum SharingLevel {
+  PRIVATE // Only team members can see
+  EVENT   // Teams at the same event can see
+  PUBLIC  // Everyone can see
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  userId   String   @map("user_id")
+  teamId   String   @map("team_id")
+  role     TeamRole @default(MEMBER)
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@map("team_members")
+}
+
+enum TeamRole {
+  MENTOR // Full admin access
+  MEMBER // Scout access
+}
+
+model TeamInvite {
+  id        String   @id @default(cuid())
+  teamId    String   @map("team_id")
+  code      String   @unique
+  createdBy String   @map("created_by")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  team    Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  creator User @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("team_invites")
+}
+
+// ============================================================================
+// FTC EVENTS & MATCHES (from FTC Events API)
+// ============================================================================
+
+model Event {
+  id        String   @id @default(cuid())
+  eventCode String   @unique @map("event_code")
+  season    Int      // 2025 for DECODE
+  name      String
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  venue     String?
+  city      String?
+  stateProv String?  @map("state_prov")
+  country   String?
+  timezone  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  matches         Match[]
+  scoutingEntries ScoutingEntry[]
+  scoutingNotes   ScoutingNote[]
+
+  @@map("events")
+}
+
+model Match {
+  id              String      @id @default(cuid())
+  eventCode       String      @map("event_code")
+  matchNumber     Int         @map("match_number")
+  tournamentLevel String      @map("tournament_level") // QUALIFICATION, SEMIFINAL, FINAL
+  red1            Int         // Team number
+  red2            Int
+  blue1           Int
+  blue2           Int
+  redScore        Int?        @map("red_score")
+  blueScore       Int?        @map("blue_score")
+  scoreDetails    Json?       @map("score_details") // Full breakdown from API
+  scheduledTime   DateTime?   @map("scheduled_time")
+  actualTime      DateTime?   @map("actual_time")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  event           Event       @relation(fields: [eventCode], references: [eventCode], onDelete: Cascade)
+  scoutingEntries ScoutingEntry[]
+
+  @@unique([eventCode, tournamentLevel, matchNumber])
+  @@map("matches")
+}
+
+// ============================================================================
+// SCOUTING DATA (DECODE-specific)
+// ============================================================================
+
+model ScoutingEntry {
+  id        String   @id @default(cuid())
+
+  // Who scouted and who was scouted
+  scouterId     String  @map("scouter_id")
+  scoutingTeamId String @map("scouting_team_id")
+  scoutedTeamId String  @map("scouted_team_id")
+
+  // Match context
+  eventCode   String  @map("event_code")
+  matchId     String? @map("match_id")
+  matchNumber Int     @map("match_number")
+  alliance    String  // RED or BLUE
+
+  // ==================
+  // AUTONOMOUS SCORING
+  // ==================
+  autoLeave             Boolean @default(false) @map("auto_leave")              // 3 pts
+  autoClassifiedCount   Int     @default(0) @map("auto_classified_count")       // 3 pts each
+  autoOverflowCount     Int     @default(0) @map("auto_overflow_count")         // 1 pt each
+  autoPatternCount      Int     @default(0) @map("auto_pattern_count")          // 2 pts each
+
+  // ==================
+  // TELEOP SCORING
+  // ==================
+  teleopClassifiedCount Int     @default(0) @map("teleop_classified_count")     // 3 pts each
+  teleopOverflowCount   Int     @default(0) @map("teleop_overflow_count")       // 1 pt each
+  teleopDepotCount      Int     @default(0) @map("teleop_depot_count")          // 1 pt each
+  teleopPatternCount    Int     @default(0) @map("teleop_pattern_count")        // 2 pts each
+  teleopMotifCount      Int     @default(0) @map("teleop_motif_count")          // 2 pts each
+
+  // ==================
+  // ENDGAME SCORING
+  // ==================
+  endgameBaseStatus     EndgameBase @default(NONE) @map("endgame_base_status")  // NONE, PARTIAL (5), FULL (10)
+
+  // ==================
+  // COMPUTED SCORES
+  // ==================
+  autoScore     Int @default(0) @map("auto_score")
+  teleopScore   Int @default(0) @map("teleop_score")
+  endgameScore  Int @default(0) @map("endgame_score")
+  totalScore    Int @default(0) @map("total_score")
+
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  scouter      User   @relation(fields: [scouterId], references: [id], onDelete: Cascade)
+  scoutingTeam Team   @relation("ScoutingTeam", fields: [scoutingTeamId], references: [id], onDelete: Cascade)
+  scoutedTeam  Team   @relation("ScoutedTeam", fields: [scoutedTeamId], references: [id], onDelete: Cascade)
+  event        Event  @relation(fields: [eventCode], references: [eventCode], onDelete: Cascade)
+  match        Match? @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@map("scouting_entries")
+}
+
+enum EndgameBase {
+  NONE    // 0 pts
+  PARTIAL // 5 pts
+  FULL    // 10 pts
+}
+
+// ============================================================================
+// QUALITATIVE SCOUTING NOTES
+// ============================================================================
+
+model ScoutingNote {
+  id String @id @default(cuid())
+
+  // Who noted and about whom
+  authorId       String @map("author_id")
+  notingTeamId   String @map("noting_team_id")
+  aboutTeamId    String @map("about_team_id")
+
+  // Context (optional)
+  eventCode String? @map("event_code")
+
+  // Qualitative ratings (1-5 scale)
+  reliabilityRating Int? @map("reliability_rating") // Robot reliability
+  driverSkillRating Int? @map("driver_skill_rating")
+  defenseRating     Int? @map("defense_rating")
+
+  // Free-form notes
+  strategyNotes   String? @map("strategy_notes")
+  mechanicalNotes String? @map("mechanical_notes")
+  generalNotes    String? @map("general_notes")
+
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  author     User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  notingTeam Team   @relation("NotingTeam", fields: [notingTeamId], references: [id], onDelete: Cascade)
+  aboutTeam  Team   @relation("NotedTeam", fields: [aboutTeamId], references: [id], onDelete: Cascade)
+  event      Event? @relation(fields: [eventCode], references: [eventCode], onDelete: SetNull)
+
+  @@map("scouting_notes")
+}
+
+// ============================================================================
+// ANALYTICS
+// ============================================================================
+
+model EPAHistory {
+  id         String   @id @default(cuid())
+  teamNumber Int      @map("team_number")
+  eventCode  String   @map("event_code")
+  matchNumber Int     @map("match_number")
+  epaValue   Float    @map("epa_value")
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  @@index([teamNumber])
+  @@index([eventCode])
+  @@map("epa_history")
+}
