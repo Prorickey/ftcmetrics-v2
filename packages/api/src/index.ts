@@ -3,6 +3,10 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
+// Import routes
+import events from "./routes/events";
+import teams from "./routes/teams";
+
 // Create the main app
 const app = new Hono();
 
@@ -22,13 +26,17 @@ app.get("/", (c) => {
     name: "FTC Metrics API",
     version: "0.0.1",
     status: "ok",
+    season: "DECODE 2025-2026",
   });
 });
 
-// API routes placeholder
 app.get("/api/health", (c) => {
   return c.json({ status: "healthy", timestamp: new Date().toISOString() });
 });
+
+// Mount routes
+app.route("/api/events", events);
+app.route("/api/teams", teams);
 
 // Start server
 const port = parseInt(process.env.PORT || "3001", 10);
