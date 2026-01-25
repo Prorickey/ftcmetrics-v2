@@ -12,6 +12,7 @@
     "@ftcmetrics/db": "workspace:*",
     "@ftcmetrics/shared": "workspace:*",
     "@hono/node-server": "^1.19.9",
+    "dotenv": "^17.2.3",
     "hono": "^4.11.5",
     "ml-matrix": "^6.12.1"
   },

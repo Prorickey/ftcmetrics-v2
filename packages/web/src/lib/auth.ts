@@ -1,3 +1,9 @@
+import { config } from "dotenv";
+import path from "path";
+
+// Load .env from workspace root
+config({ path: path.resolve(process.cwd(), "../../.env") });
+
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import Google from "next-auth/providers/google";
@@ -6,6 +12,7 @@ import GitHub from "next-auth/providers/github";
 import { prisma } from "@ftcmetrics/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
   adapter: PrismaAdapter(prisma),
   providers: [
     Google({

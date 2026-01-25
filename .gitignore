@@ -2,6 +2,7 @@
 node_modules/
 .pnp
 .pnp.js
+.bun/
 
 # Build outputs
 dist/
@@ -11,6 +12,7 @@ out/
 
 # Prisma
 prisma/generated/
+packages/db/node_modules/.prisma/
 
 # Environment
 .env
@@ -25,6 +27,7 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+bun-debug.log*
 
 # Editor
 .idea/
@@ -40,3 +43,26 @@ coverage/
 # Misc
 *.tsbuildinfo
 .turbo/
+
+# Database
+*.db
+*.sqlite
+
+# OS
+Thumbs.db
+
+# Python (legacy)
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.Python
+*.egg-info/
+
+# Claude
+.claude/
+
+# Temp files
+*.tmp
+*.temp
+.cache/

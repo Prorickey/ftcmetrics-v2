@@ -5,7 +5,7 @@
  * Base URL: https://ftc-events.firstinspires.org/api/v2.0
  */
 
-const FTC_API_BASE = "https://ftc-events.firstinspires.org/api/v2.0";
+const FTC_API_BASE = "https://ftc-api.firstinspires.org/v2.0";
 const CURRENT_SEASON = 2025; // DECODE season
 
 interface FTCApiConfig {

@@ -267,10 +267,11 @@ export const scoutingApi = {
 export const eventsApi = {
   getEvents: async () => {
     return fetchApi<Array<{
-      eventCode: string;
+      code: string;
       name: string;
       city: string;
-      stateProv: string;
+      stateprov: string;
+      country: string;
       dateStart: string;
       dateEnd: string;
       type: string;

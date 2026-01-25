@@ -39,7 +39,7 @@ export function Header() {
               Analytics
             </Link>
             <Link
-              href="/teams"
+              href="/my-teams"
               className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               Teams
@@ -79,13 +79,6 @@ export function Header() {
                         {session.user.email}
                       </p>
                     </div>
-                    <Link
-                      href="/settings"
-                      className="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      Settings
-                    </Link>
                     <Link
                       href="/my-teams"
                       className="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"

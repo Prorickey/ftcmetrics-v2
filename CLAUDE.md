@@ -127,3 +127,21 @@ cp .env.example .env
 - **Minimal UI**: Clean interface inspired by Statbotics
 - **PWA**: Offline scouting with sync when back online
 - **Kubernetes-ready**: Stateless containers for easy scaling
+
+## Skills
+
+Project-specific skills are available in `.claude/skills/`:
+
+| Skill | Category | Description |
+|-------|----------|-------------|
+| `analytics` | analytics | EPA and OPR calculation algorithms |
+| `bun-workspace` | tools | Bun runtime and monorepo workspace management |
+| `ftc-events-api` | api | FTC Events API integration and usage |
+| `hono` | api | Hono API framework patterns and middleware |
+| `nextauth` | auth | NextAuth.js v5 authentication with Prisma adapter |
+| `nextjs` | frontend | Next.js 16 App Router and React 19 patterns |
+| `prismadb` | database | Prisma 7 ORM configuration with PostgreSQL adapters |
+| `skill-builder` | tools | Create new skills for this project |
+| `soketi` | realtime | Soketi WebSocket server for real-time features |
+| `tailwind` | frontend | Tailwind CSS with FTC branding and responsive design |
+| `typescript-monorepo` | tools | TypeScript configuration across workspace packages |

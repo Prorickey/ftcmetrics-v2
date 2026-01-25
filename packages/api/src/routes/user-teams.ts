@@ -38,9 +38,10 @@ userTeams.get("/", async (c) => {
     return c.json({
       success: true,
       data: memberships.map((m) => ({
-        ...m.team,
+        teamId: m.teamId,
         role: m.role,
         joinedAt: m.joinedAt,
+        team: m.team,
       })),
     });
   } catch (error) {

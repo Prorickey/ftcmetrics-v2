@@ -1,7 +1,14 @@
+import { config } from "dotenv";
+import path from "path";
+
+// Load .env from workspace root
+config({ path: path.resolve(process.cwd(), "../../.env") });
+
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { prisma } from "@ftcmetrics/db";
 
 // Import routes
 import events from "./routes/events";
@@ -42,8 +49,30 @@ app.get("/", (c) => {
   });
 });
 
-app.get("/api/health", (c) => {
-  return c.json({ status: "healthy", timestamp: new Date().toISOString() });
+app.get("/api/health", async (c) => {
+  const checks: Record<string, string> = {
+    api: "healthy",
+    database: "unknown",
+  };
+
+  // Check database connectivity
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    checks.database = "healthy";
+  } catch {
+    checks.database = "unhealthy";
+  }
+
+  const allHealthy = Object.values(checks).every((s) => s === "healthy");
+
+  return c.json(
+    {
+      status: allHealthy ? "healthy" : "degraded",
+      timestamp: new Date().toISOString(),
+      checks,
+    },
+    allHealthy ? 200 : 503
+  );
 });
 
 // Mount routes
