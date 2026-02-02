@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   eventsApi,
   analyticsApi,
+  ftcTeamsApi,
   type OPRResult,
   type EPAResult,
 } from "@/lib/api";
@@ -20,6 +21,16 @@ interface Event {
   dateEnd: string;
 }
 
+interface TeamData {
+  teamNumber: number;
+  nameFull: string;
+  nameShort: string;
+  city: string;
+  stateProv: string;
+  country: string;
+  rookieYear: number;
+}
+
 function AnalyticsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -29,6 +40,15 @@ function AnalyticsContent() {
   const [eventsLoading, setEventsLoading] = useState(true);
   const [selectedEventCode, setSelectedEventCode] = useState(eventCodeParam);
   const [activeTab, setActiveTab] = useState<"opr" | "epa">("epa");
+
+  // Search mode toggle
+  const [searchMode, setSearchMode] = useState<"event" | "team">("event");
+
+  // Team search state
+  const [teamSearchQuery, setTeamSearchQuery] = useState("");
+  const [teamData, setTeamData] = useState<TeamData | null>(null);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamError, setTeamError] = useState<string | null>(null);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -140,6 +160,31 @@ function AnalyticsContent() {
     setSelectedEventCode(eventCode);
   };
 
+  const handleTeamSearch = async () => {
+    const teamNumber = parseInt(teamSearchQuery, 10);
+    if (!teamNumber || teamNumber <= 0) {
+      setTeamError("Please enter a valid team number");
+      return;
+    }
+
+    setTeamLoading(true);
+    setTeamError(null);
+    setTeamData(null);
+
+    try {
+      const result = await ftcTeamsApi.getTeam(teamNumber);
+      if (result.success && result.data) {
+        setTeamData(result.data);
+      } else {
+        setTeamError(`Team ${teamNumber} not found`);
+      }
+    } catch {
+      setTeamError("Failed to look up team. Please try again.");
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
   const selectedEvent = events.find((e) => e.code === selectedEventCode);
 
   return (
@@ -151,128 +196,251 @@ function AnalyticsContent() {
         </p>
       </div>
 
-      {/* Event Selection */}
+      {/* Search Card */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
-        <label className="block text-sm font-medium mb-3">Find Event</label>
+        {/* Mode Toggle */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setSearchMode("event")}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              searchMode === "event"
+                ? "bg-ftc-orange text-white"
+                : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+            }`}
+          >
+            Find Event
+          </button>
+          <button
+            onClick={() => setSearchMode("team")}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              searchMode === "team"
+                ? "bg-ftc-orange text-white"
+                : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+            }`}
+          >
+            Find Team
+          </button>
+        </div>
 
-        {eventsLoading ? (
-          <div className="h-12 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
-        ) : (
+        {/* Event Search Mode */}
+        {searchMode === "event" && (
           <>
-            {/* Search and Filters Row */}
-            <div className="grid gap-3 md:grid-cols-4 mb-4">
-              {/* Search Box */}
-              <div className="md:col-span-2">
-                <div className="relative">
-                  <svg
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+            {eventsLoading ? (
+              <div className="h-12 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+            ) : (
+              <>
+                {/* Search and Filters Row */}
+                <div className="grid gap-3 md:grid-cols-4 mb-4">
+                  {/* Search Box */}
+                  <div className="md:col-span-2">
+                    <div className="relative">
+                      <svg
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder="Search events by name, city, or code..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Country Filter */}
+                  <select
+                    value={countryFilter}
+                    onChange={(e) => setCountryFilter(e.target.value)}
+                    className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Search events by name, city, or code..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange"
-                  />
+                    <option value="">All Countries</option>
+                    {countries.map((country) => (
+                      <option key={country} value={country}>
+                        {country}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Date Filter */}
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value as "all" | "upcoming" | "past")}
+                    className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange"
+                  >
+                    <option value="all">All Dates</option>
+                    <option value="past">Past Events (with data)</option>
+                    <option value="upcoming">Upcoming Events</option>
+                  </select>
                 </div>
-              </div>
 
-              {/* Country Filter */}
-              <select
-                value={countryFilter}
-                onChange={(e) => setCountryFilter(e.target.value)}
-                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange"
-              >
-                <option value="">All Countries</option>
-                {countries.map((country) => (
-                  <option key={country} value={country}>
-                    {country}
-                  </option>
-                ))}
-              </select>
-
-              {/* Date Filter */}
-              <select
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value as "all" | "upcoming" | "past")}
-                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange"
-              >
-                <option value="all">All Dates</option>
-                <option value="past">Past Events (with data)</option>
-                <option value="upcoming">Upcoming Events</option>
-              </select>
-            </div>
-
-            {/* Events List */}
-            <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-              {filteredEvents.length === 0 ? (
-                <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                  No events found matching your filters
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredEvents.slice(0, 50).map((event) => (
-                    <button
-                      key={event.code}
-                      onClick={() => handleEventSelect(event.code)}
-                      className={`w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
-                        selectedEventCode === event.code
-                          ? "bg-ftc-orange/10 border-l-4 border-ftc-orange"
-                          : ""
-                      }`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">{event.name}</p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {event.city}, {event.stateprov}, {event.country}
-                          </p>
+                {/* Events List */}
+                <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                  {filteredEvents.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                      No events found matching your filters
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {filteredEvents.slice(0, 50).map((event) => (
+                        <button
+                          key={event.code}
+                          onClick={() => handleEventSelect(event.code)}
+                          className={`w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                            selectedEventCode === event.code
+                              ? "bg-ftc-orange/10 border-l-4 border-ftc-orange"
+                              : ""
+                          }`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium">{event.name}</p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {event.city}, {event.stateprov}, {event.country}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs font-mono text-gray-400">{event.code}</p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(event.dateStart).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                      {filteredEvents.length > 50 && (
+                        <div className="p-3 text-center text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800">
+                          Showing 50 of {filteredEvents.length} events. Use search to narrow down.
                         </div>
-                        <div className="text-right">
-                          <p className="text-xs font-mono text-gray-400">{event.code}</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(event.dateStart).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                  {filteredEvents.length > 50 && (
-                    <div className="p-3 text-center text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800">
-                      Showing 50 of {filteredEvents.length} events. Use search to narrow down.
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            {/* Selected Event Display */}
-            {selectedEvent && (
-              <div className="mt-3 p-3 bg-ftc-orange/10 rounded-lg flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-ftc-orange">{selectedEvent.name}</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {selectedEvent.city}, {selectedEvent.stateprov} • {selectedEvent.code}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSelectedEventCode("")}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                {/* Selected Event Display */}
+                {selectedEvent && (
+                  <div className="mt-3 p-3 bg-ftc-orange/10 rounded-lg flex justify-between items-center">
+                    <div>
+                      <p className="font-medium text-ftc-orange">{selectedEvent.name}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {selectedEvent.city}, {selectedEvent.stateprov} • {selectedEvent.code}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedEventCode("")}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* Team Search Mode */}
+        {searchMode === "team" && (
+          <>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleTeamSearch();
+              }}
+              className="flex gap-3"
+            >
+              <div className="relative flex-1">
+                <svg
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+                <input
+                  type="number"
+                  placeholder="Enter team number..."
+                  value={teamSearchQuery}
+                  onChange={(e) => setTeamSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={teamLoading || !teamSearchQuery}
+                className="px-5 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {teamLoading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                ) : (
+                  "Search"
+                )}
+              </button>
+            </form>
+
+            {/* Team Error */}
+            {teamError && (
+              <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-sm text-red-600 dark:text-red-400">{teamError}</p>
+              </div>
+            )}
+
+            {/* Team Result */}
+            {teamData && (
+              <div className="mt-3 p-4 bg-ftc-orange/10 rounded-lg">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-bold text-ftc-orange text-lg">
+                      Team {teamData.teamNumber}
+                    </p>
+                    <p className="font-medium mt-0.5">
+                      {teamData.nameShort || teamData.nameFull}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {teamData.city}, {teamData.stateProv}, {teamData.country}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                      Rookie Year: {teamData.rookieYear}
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Link
+                      href={`/analytics/team/${teamData.teamNumber}`}
+                      className="px-4 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity text-sm"
+                    >
+                      View Team Analytics
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setTeamData(null);
+                        setTeamSearchQuery("");
+                        setTeamError(null);
+                      }}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 mt-1"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </>
