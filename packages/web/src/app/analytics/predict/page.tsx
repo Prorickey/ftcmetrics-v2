@@ -25,7 +25,7 @@ function PredictContent() {
   const initialEvent = searchParams.get("event") || "";
 
   const [events, setEvents] = useState<
-    Array<{ eventCode: string; name: string; city: string; stateProv: string }>
+    Array<{ code: string; name: string; city: string; stateprov: string }>
   >([]);
   const [eventTeams, setEventTeams] = useState<EventTeam[]>([]);
   const [selectedEvent, setSelectedEvent] = useState(initialEvent);
@@ -148,7 +148,7 @@ function PredictContent() {
           >
             <option value="">Select event</option>
             {events.map((event) => (
-              <option key={event.eventCode} value={event.eventCode}>
+              <option key={event.code} value={event.code}>
                 {event.name}
               </option>
             ))}

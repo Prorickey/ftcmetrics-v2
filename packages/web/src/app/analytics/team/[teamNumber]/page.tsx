@@ -74,7 +74,7 @@ function TeamAnalyticsContent() {
       try {
         const result = await eventsApi.getEvents();
         if (result.success && result.data) {
-          setEvents(result.data.map((e) => ({ eventCode: e.eventCode, name: e.name })));
+          setEvents(result.data.map((e) => ({ eventCode: e.code, name: e.name })));
         }
       } catch (err) {
         console.error("Failed to fetch events:", err);
