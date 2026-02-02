@@ -59,10 +59,13 @@ venv/
 .Python
 *.egg-info/
 
-# Claude
-.claude/
-
 # Temp files
 *.tmp
 *.temp
 .cache/
+
+# PWA files
+packages/web/public/sw.js
+packages/web/public/sw.js.map
+packages/web/public/workbox-*.js
+packages/web/public/workbox-*.js.map

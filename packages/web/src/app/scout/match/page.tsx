@@ -5,6 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { scoutingApi, eventsApi } from "@/lib/api";
+import {
+  queueScoutingEntry,
+  syncPendingEntries,
+  getQueueCount,
+  isOnline,
+} from "@/lib/offline-queue";
 
 interface EventTeam {
   teamNumber: number;
@@ -60,6 +66,9 @@ function ScoutMatchContent() {
   const [teamsLoading, setTeamsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [online, setOnline] = useState(true);
+  const [queueCount, setQueueCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
 
   // Calculate scores for display
   const autoScore =
@@ -83,6 +92,64 @@ function ScoutMatchContent() {
       : 0;
 
   const totalScore = autoScore + teleopScore + endgameScore;
+
+  // Monitor online/offline status and queue count
+  useEffect(() => {
+    const updateOnlineStatus = () => {
+      setOnline(isOnline());
+    };
+
+    const updateQueueCount = async () => {
+      try {
+        const count = await getQueueCount();
+        setQueueCount(count);
+      } catch (err) {
+        console.error("Failed to get queue count:", err);
+      }
+    };
+
+    // Initial check
+    updateOnlineStatus();
+    updateQueueCount();
+
+    // Listen for online/offline events
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+
+    // Update queue count periodically
+    const interval = setInterval(updateQueueCount, 5000);
+
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Auto-sync when coming back online
+  useEffect(() => {
+    async function autoSync() {
+      if (online && queueCount > 0 && !syncing && session?.user?.id) {
+        setSyncing(true);
+        try {
+          const result = await syncPendingEntries();
+          if (result.synced > 0) {
+            setSuccess(true);
+            setTimeout(() => setSuccess(false), 3000);
+          }
+          // Update queue count after sync
+          const newCount = await getQueueCount();
+          setQueueCount(newCount);
+        } catch (err) {
+          console.error("Auto-sync failed:", err);
+        } finally {
+          setSyncing(false);
+        }
+      }
+    }
+
+    autoSync();
+  }, [online, queueCount, syncing, session?.user?.id]);
 
   useEffect(() => {
     async function fetchEventTeams() {
@@ -117,23 +184,49 @@ function ScoutMatchContent() {
     setLoading(true);
     setError(null);
 
-    try {
-      const result = await scoutingApi.submitEntry(session.user.id, {
-        scoutingTeamId: teamId,
-        eventCode,
-        ...data,
-      });
+    const entryData = {
+      scoutingTeamId: teamId,
+      eventCode,
+      ...data,
+    };
 
-      if (result.success) {
+    try {
+      // Check if online
+      if (!isOnline()) {
+        // Queue for later submission
+        await queueScoutingEntry(session.user.id, entryData);
         setSuccess(true);
+        setError("Saved offline - will sync when connected");
+
         // Reset form for next match
         setData({
           ...initialData,
           matchNumber: data.matchNumber + 1,
         });
-        setTimeout(() => setSuccess(false), 3000);
+
+        // Update queue count
+        const newCount = await getQueueCount();
+        setQueueCount(newCount);
+
+        setTimeout(() => {
+          setSuccess(false);
+          setError(null);
+        }, 3000);
       } else {
-        setError(result.error || "Failed to submit entry");
+        // Submit normally when online
+        const result = await scoutingApi.submitEntry(session.user.id, entryData);
+
+        if (result.success) {
+          setSuccess(true);
+          // Reset form for next match
+          setData({
+            ...initialData,
+            matchNumber: data.matchNumber + 1,
+          });
+          setTimeout(() => setSuccess(false), 3000);
+        } else {
+          setError(result.error || "Failed to submit entry");
+        }
       }
     } catch (err) {
       setError("Failed to submit entry");
@@ -147,6 +240,31 @@ function ScoutMatchContent() {
       ...prev,
       [field]: Math.max(0, (prev[field] as number) + delta),
     }));
+  };
+
+  const handleManualSync = async () => {
+    if (!online || queueCount === 0 || syncing) return;
+
+    setSyncing(true);
+    setError(null);
+
+    try {
+      const result = await syncPendingEntries();
+      if (result.synced > 0) {
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      }
+      if (result.failed > 0) {
+        setError(`Synced ${result.synced} entries, ${result.failed} failed`);
+      }
+      // Update queue count after sync
+      const newCount = await getQueueCount();
+      setQueueCount(newCount);
+    } catch (err) {
+      setError("Sync failed");
+    } finally {
+      setSyncing(false);
+    }
   };
 
   if (!teamId || !eventCode) {
@@ -177,8 +295,38 @@ function ScoutMatchContent() {
           </svg>
           Back
         </Link>
-        <h1 className="text-2xl font-bold">Scout Match</h1>
-        <p className="text-gray-600 dark:text-gray-400">Event: {eventCode}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Scout Match</h1>
+            <p className="text-gray-600 dark:text-gray-400">Event: {eventCode}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Queue count badge */}
+            {queueCount > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
+                  {queueCount} pending
+                </span>
+              </div>
+            )}
+            {/* Online/Offline indicator */}
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+              online
+                ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${online ? "bg-green-500" : "bg-red-500"}`} />
+              <span className={`text-sm font-medium ${
+                online ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+              }`}>
+                {syncing ? "Syncing..." : online ? "Online" : "Offline"}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {success && (
@@ -190,6 +338,28 @@ function ScoutMatchContent() {
       {error && (
         <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400">
           {error}
+        </div>
+      )}
+
+      {queueCount > 0 && online && (
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-blue-900 dark:text-blue-100">
+                {queueCount} {queueCount === 1 ? "entry" : "entries"} pending sync
+              </p>
+              <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                Entries will sync automatically when online
+              </p>
+            </div>
+            <button
+              onClick={handleManualSync}
+              disabled={syncing}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {syncing ? "Syncing..." : "Sync Now"}
+            </button>
+          </div>
         </div>
       )}
 
