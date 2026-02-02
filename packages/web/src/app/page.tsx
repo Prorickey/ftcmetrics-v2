@@ -1,15 +1,9 @@
 import { auth } from "@/lib/auth";
 import { Header } from "@/components/header";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 export default async function Home() {
   const session = await auth();
-
-  // Redirect logged in users to dashboard
-  if (session?.user) {
-    redirect("/dashboard");
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -26,12 +20,21 @@ export default async function Home() {
             Track match data, compute EPA/OPR rankings, and predict match outcomes.
           </p>
           <div className="flex gap-4 justify-center">
-            <Link
-              href="/login"
-              className="px-8 py-4 bg-ftc-orange text-white rounded-lg font-semibold text-lg hover:opacity-90 transition-opacity"
-            >
-              Get Started
-            </Link>
+            {session?.user ? (
+              <Link
+                href="/dashboard"
+                className="px-8 py-4 bg-ftc-orange text-white rounded-lg font-semibold text-lg hover:opacity-90 transition-opacity"
+              >
+                Go to Dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="px-8 py-4 bg-ftc-orange text-white rounded-lg font-semibold text-lg hover:opacity-90 transition-opacity"
+              >
+                Get Started
+              </Link>
+            )}
             <Link
               href="/analytics"
               className="px-8 py-4 border border-gray-300 dark:border-gray-700 rounded-lg font-semibold text-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
