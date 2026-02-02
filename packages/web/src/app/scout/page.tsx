@@ -2,9 +2,9 @@
 
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState, useMemo, Suspense } from "react";
+import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
 import Link from "next/link";
-import { teamsApi, eventsApi } from "@/lib/api";
+import { teamsApi, eventsApi, scoutingApi } from "@/lib/api";
 
 interface UserTeam {
   teamId: string;
@@ -27,6 +27,406 @@ interface FTCEvent {
   type: string;
 }
 
+interface ScoutingEntry {
+  id: string;
+  eventCode: string;
+  matchNumber: number;
+  alliance: "RED" | "BLUE";
+  autoLeave: boolean;
+  autoClassifiedCount: number;
+  autoOverflowCount: number;
+  autoPatternCount: number;
+  teleopClassifiedCount: number;
+  teleopOverflowCount: number;
+  teleopDepotCount: number;
+  teleopPatternCount: number;
+  teleopMotifCount: number;
+  endgameBaseStatus: "NONE" | "PARTIAL" | "FULL";
+  autoScore: number;
+  teleopScore: number;
+  endgameScore: number;
+  totalScore: number;
+  createdAt: string;
+  scoutedTeam: {
+    id: string;
+    teamNumber: number;
+    name: string;
+  };
+  scouter: {
+    id: string;
+    name: string;
+    image: string | null;
+  };
+}
+
+interface EditFormData {
+  matchNumber: number;
+  alliance: "RED" | "BLUE";
+  autoLeave: boolean;
+  autoClassifiedCount: number;
+  autoOverflowCount: number;
+  autoPatternCount: number;
+  teleopClassifiedCount: number;
+  teleopOverflowCount: number;
+  teleopDepotCount: number;
+  teleopPatternCount: number;
+  teleopMotifCount: number;
+  endgameBaseStatus: "NONE" | "PARTIAL" | "FULL";
+}
+
+// Counter Field Component (matches the pattern from scout/match/page.tsx)
+function CounterField({
+  label,
+  points,
+  value,
+  onChange,
+}: {
+  label: string;
+  points: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+      <div>
+        <p className="font-medium text-sm">{label}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{points}</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(0, value - 1))}
+          className="w-9 h-9 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center text-lg font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+        >
+          -
+        </button>
+        <span className="w-6 text-center text-lg font-bold">{value}</span>
+        <button
+          type="button"
+          onClick={() => onChange(value + 1)}
+          className="w-9 h-9 bg-ftc-orange text-white rounded-lg flex items-center justify-center text-lg font-bold hover:opacity-90 transition-opacity"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EditEntryForm({
+  entry,
+  userId,
+  onSave,
+  onCancel,
+}: {
+  entry: ScoutingEntry;
+  userId: string;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const [data, setData] = useState<EditFormData>({
+    matchNumber: entry.matchNumber,
+    alliance: entry.alliance,
+    autoLeave: entry.autoLeave,
+    autoClassifiedCount: entry.autoClassifiedCount,
+    autoOverflowCount: entry.autoOverflowCount,
+    autoPatternCount: entry.autoPatternCount,
+    teleopClassifiedCount: entry.teleopClassifiedCount,
+    teleopOverflowCount: entry.teleopOverflowCount,
+    teleopDepotCount: entry.teleopDepotCount,
+    teleopPatternCount: entry.teleopPatternCount,
+    teleopMotifCount: entry.teleopMotifCount,
+    endgameBaseStatus: entry.endgameBaseStatus,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Calculate scores for display
+  const autoScore =
+    (data.autoLeave ? 3 : 0) +
+    data.autoClassifiedCount * 3 +
+    data.autoOverflowCount * 1 +
+    data.autoPatternCount * 2;
+
+  const teleopScore =
+    data.teleopClassifiedCount * 3 +
+    data.teleopOverflowCount * 1 +
+    data.teleopDepotCount * 1 +
+    data.teleopPatternCount * 2 +
+    data.teleopMotifCount * 2;
+
+  const endgameScore =
+    data.endgameBaseStatus === "FULL"
+      ? 10
+      : data.endgameBaseStatus === "PARTIAL"
+      ? 5
+      : 0;
+
+  const totalScore = autoScore + teleopScore + endgameScore;
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+
+    try {
+      const result = await scoutingApi.updateEntry(userId, entry.id, data);
+      if (result.success) {
+        onSave();
+      } else {
+        setError(result.error || "Failed to update entry");
+      }
+    } catch {
+      setError("Failed to update entry");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">
+      {error && (
+        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Match Info */}
+      <div>
+        <p className="text-sm font-medium mb-2">Match Info</p>
+        <div className="grid gap-3 grid-cols-2">
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+              Match #
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={data.matchNumber}
+              onChange={(e) =>
+                setData((prev) => ({
+                  ...prev,
+                  matchNumber: parseInt(e.target.value, 10) || 1,
+                }))
+              }
+              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+              Alliance
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setData((prev) => ({ ...prev, alliance: "RED" }))}
+                className={`flex-1 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  data.alliance === "RED"
+                    ? "bg-red-500 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
+                }`}
+              >
+                Red
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setData((prev) => ({ ...prev, alliance: "BLUE" }))
+                }
+                className={`flex-1 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  data.alliance === "BLUE"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
+                }`}
+              >
+                Blue
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Autonomous */}
+      <div>
+        <div className="flex justify-between items-center mb-2">
+          <p className="text-sm font-medium">Autonomous</p>
+          <span className="text-xs font-medium text-ftc-orange">
+            {autoScore} pts
+          </span>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <div>
+              <p className="font-medium text-sm">Leave Starting Zone</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">3 pts</p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setData((prev) => ({ ...prev, autoLeave: !prev.autoLeave }))
+              }
+              className={`w-12 h-7 rounded-full transition-colors ${
+                data.autoLeave
+                  ? "bg-ftc-orange"
+                  : "bg-gray-300 dark:bg-gray-600"
+              }`}
+            >
+              <div
+                className={`w-5 h-5 bg-white rounded-full transition-transform mx-1 ${
+                  data.autoLeave ? "translate-x-5" : ""
+                }`}
+              />
+            </button>
+          </div>
+          <CounterField
+            label="Classified (High)"
+            points="3 pts each"
+            value={data.autoClassifiedCount}
+            onChange={(v) =>
+              setData((prev) => ({ ...prev, autoClassifiedCount: v }))
+            }
+          />
+          <CounterField
+            label="Overflow (Low)"
+            points="1 pt each"
+            value={data.autoOverflowCount}
+            onChange={(v) =>
+              setData((prev) => ({ ...prev, autoOverflowCount: v }))
+            }
+          />
+          <CounterField
+            label="Pattern Complete"
+            points="2 pts each"
+            value={data.autoPatternCount}
+            onChange={(v) =>
+              setData((prev) => ({ ...prev, autoPatternCount: v }))
+            }
+          />
+        </div>
+      </div>
+
+      {/* Teleop */}
+      <div>
+        <div className="flex justify-between items-center mb-2">
+          <p className="text-sm font-medium">Teleop</p>
+          <span className="text-xs font-medium text-ftc-blue">
+            {teleopScore} pts
+          </span>
+        </div>
+        <div className="space-y-2">
+          <CounterField
+            label="Classified (High)"
+            points="3 pts each"
+            value={data.teleopClassifiedCount}
+            onChange={(v) =>
+              setData((prev) => ({ ...prev, teleopClassifiedCount: v }))
+            }
+          />
+          <CounterField
+            label="Overflow (Low)"
+            points="1 pt each"
+            value={data.teleopOverflowCount}
+            onChange={(v) =>
+              setData((prev) => ({ ...prev, teleopOverflowCount: v }))
+            }
+          />
+          <CounterField
+            label="Depot"
+            points="1 pt each"
+            value={data.teleopDepotCount}
+            onChange={(v) =>
+              setData((prev) => ({ ...prev, teleopDepotCount: v }))
+            }
+          />
+          <CounterField
+            label="Pattern Complete"
+            points="2 pts each"
+            value={data.teleopPatternCount}
+            onChange={(v) =>
+              setData((prev) => ({ ...prev, teleopPatternCount: v }))
+            }
+          />
+          <CounterField
+            label="Motif Complete"
+            points="2 pts each"
+            value={data.teleopMotifCount}
+            onChange={(v) =>
+              setData((prev) => ({ ...prev, teleopMotifCount: v }))
+            }
+          />
+        </div>
+      </div>
+
+      {/* Endgame */}
+      <div>
+        <div className="flex justify-between items-center mb-2">
+          <p className="text-sm font-medium">Endgame</p>
+          <span className="text-xs font-medium text-green-500">
+            {endgameScore} pts
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {(["NONE", "PARTIAL", "FULL"] as const).map((status) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() =>
+                setData((prev) => ({ ...prev, endgameBaseStatus: status }))
+              }
+              className={`py-2 rounded-lg font-medium text-sm transition-colors ${
+                data.endgameBaseStatus === status
+                  ? "bg-green-500 text-white"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
+              }`}
+            >
+              <span className="block">{status}</span>
+              <span className="text-xs opacity-75">
+                {status === "FULL"
+                  ? "10 pts"
+                  : status === "PARTIAL"
+                  ? "5 pts"
+                  : "0 pts"}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Total Score */}
+      <div className="bg-gradient-to-r from-ftc-orange to-ftc-blue rounded-lg p-4 text-white">
+        <div className="flex justify-between items-center">
+          <span className="text-sm font-medium">Estimated Total</span>
+          <span className="text-2xl font-bold">{totalScore}</span>
+        </div>
+        <div className="flex justify-between mt-1 text-xs opacity-80">
+          <span>Auto: {autoScore}</span>
+          <span>Teleop: {teleopScore}</span>
+          <span>Endgame: {endgameScore}</span>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="flex-1 py-3 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save Changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ScoutContent() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
@@ -38,6 +438,13 @@ function ScoutContent() {
   const [selectedEventCode, setSelectedEventCode] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(false);
+
+  // Scouting entries state
+  const [entries, setEntries] = useState<ScoutingEntry[]>([]);
+  const [entriesLoading, setEntriesLoading] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [deductingId, setDeductingId] = useState<string | null>(null);
+  const [deductMessage, setDeductMessage] = useState<{ id: string; text: string; type: "success" | "error" } | null>(null);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -90,6 +497,53 @@ function ScoutContent() {
 
     fetchEvents();
   }, []);
+
+  // Fetch scouting entries for the selected team
+  const fetchEntries = useCallback(async () => {
+    if (!session?.user?.id || !selectedTeam) return;
+    setEntriesLoading(true);
+    try {
+      const result = await scoutingApi.getEntries(session.user.id, {
+        scoutingTeamId: selectedTeam,
+      });
+      if (result.success && result.data) {
+        setEntries(result.data as ScoutingEntry[]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch entries:", err);
+    } finally {
+      setEntriesLoading(false);
+    }
+  }, [session?.user?.id, selectedTeam]);
+
+  useEffect(() => {
+    fetchEntries();
+  }, [fetchEntries]);
+
+  // Handle manual deduct partner action
+  const handleDeductPartner = async (entryId: string) => {
+    if (!session?.user?.id) return;
+    setDeductingId(entryId);
+    setDeductMessage(null);
+    try {
+      const result = await scoutingApi.deductPartner(session.user.id, entryId);
+      if (result.success) {
+        setDeductMessage({ id: entryId, text: "Partner entry created", type: "success" });
+        // Refresh entries to show the new deducted entry
+        fetchEntries();
+      } else {
+        setDeductMessage({
+          id: entryId,
+          text: result.error || "Deduction failed",
+          type: "error",
+        });
+      }
+    } catch {
+      setDeductMessage({ id: entryId, text: "Deduction failed", type: "error" });
+    } finally {
+      setDeductingId(null);
+    }
+  };
 
   // Filter events based on search and date filter
   const filteredEvents = useMemo(() => {
@@ -322,10 +776,115 @@ function ScoutContent() {
       {/* Recent Entries */}
       <div className="mt-8 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
         <h2 className="font-semibold text-lg mb-4">Recent Scouting Entries</h2>
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          <p>No entries yet</p>
-          <p className="text-sm mt-1">Your scouting submissions will appear here</p>
-        </div>
+        {entriesLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-20 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse"
+              />
+            ))}
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <p>No entries yet</p>
+            <p className="text-sm mt-1">Your scouting submissions will appear here</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {entries.map((entry) => (
+              <div
+                key={entry.id}
+                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold">
+                        Team {entry.scoutedTeam.teamNumber}
+                      </span>
+                      <span
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          entry.alliance === "RED"
+                            ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                            : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                        }`}
+                      >
+                        {entry.alliance}
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        Match {entry.matchNumber}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      <span className="font-mono text-xs">
+                        {entry.eventCode}
+                      </span>
+                      <span>
+                        {new Date(entry.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-sm">
+                      <span className="text-ftc-orange">
+                        Auto: {entry.autoScore}
+                      </span>
+                      <span className="text-ftc-blue">
+                        Teleop: {entry.teleopScore}
+                      </span>
+                      <span className="text-green-500">
+                        End: {entry.endgameScore}
+                      </span>
+                      <span className="font-bold">
+                        Total: {entry.totalScore}
+                      </span>
+                    </div>
+                  </div>
+
+                  {editingEntryId !== entry.id && (
+                    <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                      {deductMessage?.id === entry.id && (
+                        <span
+                          className={`text-xs ${
+                            deductMessage.type === "success"
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-red-500 dark:text-red-400"
+                          }`}
+                        >
+                          {deductMessage.text}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => setEditingEntryId(entry.id)}
+                        className="px-3 py-1.5 text-sm font-medium text-ftc-orange bg-ftc-orange/10 rounded-lg hover:bg-ftc-orange/20 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeductPartner(entry.id)}
+                        disabled={deductingId === entry.id}
+                        className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        {deductingId === entry.id ? "Deducting..." : "Deduct Partner"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {editingEntryId === entry.id && session?.user?.id && (
+                  <EditEntryForm
+                    entry={entry}
+                    userId={session.user.id}
+                    onSave={() => {
+                      setEditingEntryId(null);
+                      fetchEntries();
+                    }}
+                    onCancel={() => setEditingEntryId(null)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

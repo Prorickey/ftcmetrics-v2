@@ -65,6 +65,7 @@ export const teamsApi = {
       name: string;
       sharingLevel: string;
       members: Array<{
+        id: string;
         userId: string;
         role: string;
         user: {
@@ -196,6 +197,31 @@ export const scoutingApi = {
     });
   },
 
+  updateEntry: async (
+    userId: string,
+    entryId: string,
+    data: Partial<{
+      matchNumber: number;
+      alliance: "RED" | "BLUE";
+      autoLeave: boolean;
+      autoClassifiedCount: number;
+      autoOverflowCount: number;
+      autoPatternCount: number;
+      teleopClassifiedCount: number;
+      teleopOverflowCount: number;
+      teleopDepotCount: number;
+      teleopPatternCount: number;
+      teleopMotifCount: number;
+      endgameBaseStatus: "NONE" | "PARTIAL" | "FULL";
+    }>
+  ) => {
+    return fetchApi(`/api/scouting/entries/${entryId}`, {
+      method: "PATCH",
+      headers: { "X-User-Id": userId },
+      body: JSON.stringify(data),
+    });
+  },
+
   getTeamSummary: async (teamNumber: number, eventCode?: string) => {
     const params = eventCode ? `?eventCode=${eventCode}` : "";
     return fetchApi<{
@@ -258,6 +284,13 @@ export const scoutingApi = {
       teamsScoutedCount: number;
       notesCount: number;
     }>(`/api/scouting/team-stats/${teamId}`, {
+      headers: { "X-User-Id": userId },
+    });
+  },
+
+  deductPartner: async (userId: string, entryId: string) => {
+    return fetchApi(`/api/scouting/entries/${entryId}/deduct-partner`, {
+      method: "POST",
       headers: { "X-User-Id": userId },
     });
   },
