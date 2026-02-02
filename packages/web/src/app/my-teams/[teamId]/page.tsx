@@ -7,6 +7,7 @@ import Link from "next/link";
 import { teamsApi, scoutingApi } from "@/lib/api";
 
 interface TeamMember {
+  id: string;
   userId: string;
   role: string;
   user: {
@@ -52,12 +53,13 @@ export default function TeamDetailPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [roleUpdating, setRoleUpdating] = useState(false);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
-  const currentUserRole = team?.members.find(
-    (m) => m.userId === session?.user?.id
-  )?.role;
-  const isAdmin = currentUserRole === "ADMIN";
-  const isMentor = currentUserRole === "MENTOR" || isAdmin;
+  const currentUserId = session?.user?.id;
+  const isMember = team?.members.some((m) => m.userId === currentUserId);
+  const currentUserMembership = team?.members.find((m) => m.userId === currentUserId);
+  const isAdmin = currentUserMembership?.role === "MENTOR" || currentUserMembership?.role === "LEADER";
 
   useEffect(() => {
     fetchTeam();
@@ -99,6 +101,34 @@ export default function TeamDetailPage() {
     await navigator.clipboard.writeText(link);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleRoleChange = async (memberId: string, newRole: string) => {
+    if (!session?.user?.id) return;
+
+    setRoleUpdating(true);
+    setRoleError(null);
+
+    try {
+      const result = await teamsApi.updateMember(
+        session.user.id,
+        teamId,
+        memberId,
+        { role: newRole }
+      );
+
+      if (result.success) {
+        await fetchTeam();
+      } else {
+        setRoleError(result.error || "Failed to update role");
+        setTimeout(() => setRoleError(null), 4000);
+      }
+    } catch (err) {
+      setRoleError("Failed to update role");
+      setTimeout(() => setRoleError(null), 4000);
+    } finally {
+      setRoleUpdating(false);
+    }
   };
 
   if (loading) {
@@ -146,12 +176,14 @@ export default function TeamDetailPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Link
-              href={`/scout?team=${teamId}`}
-              className="px-4 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
-            >
-              Scout Matches
-            </Link>
+            {currentUserMembership?.role !== "FRIEND" && (
+              <Link
+                href={`/scout?team=${teamId}`}
+                className="px-4 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+              >
+                Scout Matches
+              </Link>
+            )}
             {isAdmin && (
               <button
                 onClick={() => setShowSettingsModal(true)}
@@ -173,44 +205,87 @@ export default function TeamDetailPage() {
           <h2 className="font-semibold text-lg mb-4">
             Members ({team.members.length})
           </h2>
+          {roleError && (
+            <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+              {roleError}
+            </div>
+          )}
           <div className="space-y-3">
-            {team.members.map((member) => (
-              <div
-                key={member.userId}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  {member.user.image ? (
-                    <img
-                      src={member.user.image}
-                      alt={member.user.name}
-                      className="w-10 h-10 rounded-full"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-ftc-orange/20 flex items-center justify-center text-ftc-orange font-medium">
-                      {member.user.name?.charAt(0) || "U"}
-                    </div>
-                  )}
-                  <div>
-                    <p className="font-medium">{member.user.name}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {member.user.email}
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={`px-2 py-1 rounded text-xs font-medium ${
-                    member.role === "ADMIN"
-                      ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-                      : member.role === "MENTOR"
-                      ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+            {team.members.map((member) => {
+              const isSelf = member.userId === session?.user?.id;
+              const canEditRole = isSelf || isAdmin;
+
+              return (
+                <div
+                  key={member.userId}
+                  className={`flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg ${
+                    isSelf ? "ring-1 ring-ftc-orange/30" : ""
                   }`}
                 >
-                  {member.role.charAt(0) + member.role.slice(1).toLowerCase()}
-                </span>
-              </div>
-            ))}
+                  <div className="flex items-center gap-3">
+                    {member.user.image ? (
+                      <img
+                        src={member.user.image}
+                        alt={member.user.name}
+                        className="w-10 h-10 rounded-full"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-ftc-orange/20 flex items-center justify-center text-ftc-orange font-medium">
+                        {member.user.name?.charAt(0) || "U"}
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-medium">
+                        {member.user.name}
+                        {isSelf && (
+                          <span className="ml-1.5 text-xs text-gray-500 dark:text-gray-400">
+                            (you)
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {member.user.email}
+                      </p>
+                    </div>
+                  </div>
+                  {canEditRole ? (
+                    <select
+                      value={member.role}
+                      disabled={roleUpdating}
+                      onChange={(e) => handleRoleChange(member.id, e.target.value)}
+                      className={`px-2 py-1 rounded text-xs font-medium border cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        member.role === "MENTOR"
+                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                          : member.role === "LEADER"
+                          ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                          : member.role === "STUDENT"
+                          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                      }`}
+                    >
+                      <option value="MENTOR">Mentor</option>
+                      <option value="LEADER">Leader</option>
+                      <option value="STUDENT">Student</option>
+                      <option value="FRIEND">Friend</option>
+                    </select>
+                  ) : (
+                    <span
+                      className={`px-2 py-1 rounded text-xs font-medium ${
+                        member.role === "MENTOR"
+                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                          : member.role === "LEADER"
+                          ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                          : member.role === "STUDENT"
+                          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                      }`}
+                    >
+                      {member.role.charAt(0) + member.role.slice(1).toLowerCase()}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -218,7 +293,7 @@ export default function TeamDetailPage() {
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="font-semibold text-lg">Invite Codes</h2>
-            {isMentor && (
+            {isAdmin && (
               <button
                 onClick={() => setShowInviteModal(true)}
                 className="text-sm text-ftc-orange hover:underline"
@@ -359,7 +434,7 @@ function CreateInviteModal({
 }) {
   const [maxUses, setMaxUses] = useState<string>("");
   const [expiresInDays, setExpiresInDays] = useState<string>("7");
-  const [role, setRole] = useState<string>("MEMBER");
+  const [role, setRole] = useState<string>("STUDENT");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
@@ -454,8 +529,10 @@ function CreateInviteModal({
                 onChange={(e) => setRole(e.target.value)}
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
               >
-                <option value="MEMBER">Member</option>
                 <option value="MENTOR">Mentor</option>
+                <option value="LEADER">Leader</option>
+                <option value="STUDENT">Student</option>
+                <option value="FRIEND">Friend</option>
               </select>
             </div>
 

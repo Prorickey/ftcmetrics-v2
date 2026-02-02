@@ -96,7 +96,7 @@ userTeams.post("/", async (c) => {
       }
     }
 
-    // Create team and add user as mentor
+    // Create team and add user as first member
     const team = await prisma.team.create({
       data: {
         teamNumber,
@@ -162,11 +162,11 @@ userTeams.get("/:teamId", async (c) => {
             },
           },
         },
-        invites: membership.role === "MENTOR" ? {
+        invites: {
           where: {
             expiresAt: { gt: new Date() },
           },
-        } : false,
+        },
       },
     });
 
@@ -189,7 +189,7 @@ userTeams.get("/:teamId", async (c) => {
 
 /**
  * PATCH /api/user-teams/:teamId
- * Update team settings (mentor only)
+ * Update team settings (MENTOR/LEADER only)
  */
 userTeams.patch("/:teamId", async (c) => {
   const userId = c.req.header("X-User-Id");
@@ -200,15 +200,23 @@ userTeams.patch("/:teamId", async (c) => {
   }
 
   try {
-    // Check if user is a mentor
+    // Check if user is a team member with admin privileges
     const membership = await prisma.teamMember.findUnique({
       where: {
         userId_teamId: { userId, teamId },
       },
     });
 
-    if (!membership || membership.role !== "MENTOR") {
-      return c.json({ success: false, error: "Must be a mentor" }, 403);
+    if (!membership) {
+      return c.json({ success: false, error: "Not a team member" }, 403);
+    }
+
+    // Only MENTOR or LEADER can update team settings
+    if (membership.role !== "MENTOR" && membership.role !== "LEADER") {
+      return c.json(
+        { success: false, error: "Insufficient permissions" },
+        403
+      );
     }
 
     const body = await c.req.json();
@@ -237,7 +245,7 @@ userTeams.patch("/:teamId", async (c) => {
 
 /**
  * POST /api/user-teams/:teamId/invites
- * Create an invite code (mentor only)
+ * Create an invite code (MENTOR/LEADER only)
  */
 userTeams.post("/:teamId/invites", async (c) => {
   const userId = c.req.header("X-User-Id");
@@ -248,15 +256,23 @@ userTeams.post("/:teamId/invites", async (c) => {
   }
 
   try {
-    // Check if user is a mentor
+    // Check if user is a team member with admin privileges
     const membership = await prisma.teamMember.findUnique({
       where: {
         userId_teamId: { userId, teamId },
       },
     });
 
-    if (!membership || membership.role !== "MENTOR") {
-      return c.json({ success: false, error: "Must be a mentor" }, 403);
+    if (!membership) {
+      return c.json({ success: false, error: "Not a team member" }, 403);
+    }
+
+    // Only MENTOR or LEADER can create invites
+    if (membership.role !== "MENTOR" && membership.role !== "LEADER") {
+      return c.json(
+        { success: false, error: "Insufficient permissions" },
+        403
+      );
     }
 
     // Generate unique code
@@ -335,12 +351,12 @@ userTeams.post("/join", async (c) => {
       );
     }
 
-    // Add as member
+    // Add as student (default role)
     await prisma.teamMember.create({
       data: {
         userId,
         teamId: invite.teamId,
-        role: "MEMBER",
+        role: "STUDENT",
       },
     });
 
@@ -348,7 +364,7 @@ userTeams.post("/join", async (c) => {
       success: true,
       data: {
         team: invite.team,
-        role: "MEMBER",
+        role: "STUDENT",
       },
     });
   } catch (error) {
@@ -359,7 +375,7 @@ userTeams.post("/join", async (c) => {
 
 /**
  * DELETE /api/user-teams/:teamId/members/:memberId
- * Remove a member from team (mentor only, or self)
+ * Remove a member from team (MENTOR/LEADER only, or self)
  */
 userTeams.delete("/:teamId/members/:memberId", async (c) => {
   const userId = c.req.header("X-User-Id");
@@ -382,7 +398,6 @@ userTeams.delete("/:teamId/members/:memberId", async (c) => {
       return c.json({ success: false, error: "Not a team member" }, 403);
     }
 
-    // Can remove self or if mentor, can remove others
     const targetMembership = await prisma.teamMember.findUnique({
       where: { id: memberId },
     });
@@ -391,12 +406,32 @@ userTeams.delete("/:teamId/members/:memberId", async (c) => {
       return c.json({ success: false, error: "Member not found" }, 404);
     }
 
-    const canRemove =
-      targetMembership.userId === userId ||
-      userMembership.role === "MENTOR";
+    // Users can remove themselves, or MENTOR/LEADER can remove others
+    const isSelf = targetMembership.userId === userId;
+    const isAdmin = userMembership.role === "MENTOR" || userMembership.role === "LEADER";
 
-    if (!canRemove) {
-      return c.json({ success: false, error: "Permission denied" }, 403);
+    if (!isSelf && !isAdmin) {
+      return c.json(
+        { success: false, error: "Insufficient permissions" },
+        403
+      );
+    }
+
+    // Don't allow removing the last admin
+    if (targetMembership.role === "MENTOR" || targetMembership.role === "LEADER") {
+      const adminCount = await prisma.teamMember.count({
+        where: {
+          teamId,
+          role: { in: ["MENTOR", "LEADER"] },
+        },
+      });
+
+      if (adminCount === 1) {
+        return c.json(
+          { success: false, error: "Cannot remove the last admin" },
+          400
+        );
+      }
     }
 
     await prisma.teamMember.delete({
@@ -412,7 +447,7 @@ userTeams.delete("/:teamId/members/:memberId", async (c) => {
 
 /**
  * PATCH /api/user-teams/:teamId/members/:memberId
- * Update member role (mentor only)
+ * Update member role (MENTOR/LEADER only, or updating own role)
  */
 userTeams.patch("/:teamId/members/:memberId", async (c) => {
   const userId = c.req.header("X-User-Id");
@@ -424,22 +459,62 @@ userTeams.patch("/:teamId/members/:memberId", async (c) => {
   }
 
   try {
-    // Check if user is a mentor
+    // Check if requesting user is a team member
     const userMembership = await prisma.teamMember.findUnique({
       where: {
         userId_teamId: { userId, teamId },
       },
     });
 
-    if (!userMembership || userMembership.role !== "MENTOR") {
-      return c.json({ success: false, error: "Must be a mentor" }, 403);
+    if (!userMembership) {
+      return c.json({ success: false, error: "Not a team member" }, 403);
+    }
+
+    // Get the target member
+    const targetMember = await prisma.teamMember.findUnique({
+      where: { id: memberId },
+    });
+
+    if (!targetMember || targetMember.teamId !== teamId) {
+      return c.json({ success: false, error: "Member not found" }, 404);
     }
 
     const body = await c.req.json();
     const { role } = body;
 
-    if (!role || !["MENTOR", "MEMBER"].includes(role)) {
+    if (!role || !["MENTOR", "LEADER", "STUDENT", "FRIEND"].includes(role)) {
       return c.json({ success: false, error: "Invalid role" }, 400);
+    }
+
+    // Check permissions: Must be admin (MENTOR/LEADER) or updating own role
+    const isSelf = targetMember.userId === userId;
+    const isAdmin = userMembership.role === "MENTOR" || userMembership.role === "LEADER";
+
+    if (!isSelf && !isAdmin) {
+      return c.json(
+        { success: false, error: "Insufficient permissions" },
+        403
+      );
+    }
+
+    // Don't allow demoting the last admin
+    if (
+      (targetMember.role === "MENTOR" || targetMember.role === "LEADER") &&
+      (role === "STUDENT" || role === "FRIEND")
+    ) {
+      const adminCount = await prisma.teamMember.count({
+        where: {
+          teamId,
+          role: { in: ["MENTOR", "LEADER"] },
+        },
+      });
+
+      if (adminCount === 1) {
+        return c.json(
+          { success: false, error: "Cannot demote the last admin" },
+          400
+        );
+      }
     }
 
     const member = await prisma.teamMember.update({

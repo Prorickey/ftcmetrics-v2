@@ -99,7 +99,7 @@ model TeamMember {
   id       String   @id @default(cuid())
   userId   String   @map("user_id")
   teamId   String   @map("team_id")
-  role     TeamRole @default(MEMBER)
+  role     TeamRole @default(STUDENT)
   joinedAt DateTime @default(now()) @map("joined_at")
 
   // Relations
@@ -113,8 +113,10 @@ model TeamMember {
 }
 
 enum TeamRole {
-  MENTOR // Full admin access
-  MEMBER // Scout access
+  MENTOR
+  LEADER
+  STUDENT
+  FRIEND
 }
 
 model TeamInvite {

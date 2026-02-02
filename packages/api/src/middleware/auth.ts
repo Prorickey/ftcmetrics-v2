@@ -129,23 +129,6 @@ export function requireTeamMembership(paramName: string = "teamId") {
 }
 
 /**
- * Team mentor/admin validation middleware
- * Must be used after requireTeamMembership
- */
-export async function requireMentorRole(c: Context, next: Next) {
-  const role = c.get("teamRole");
-
-  if (role !== "MENTOR") {
-    return c.json(
-      { success: false, error: "Mentor access required" },
-      403
-    );
-  }
-
-  await next();
-}
-
-/**
  * Rate limiting middleware (simple in-memory implementation)
  * For production, use Redis-backed rate limiting
  */
