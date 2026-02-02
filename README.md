@@ -4,13 +4,16 @@ A scouting and analytics platform for FIRST Tech Challenge (FTC) teams. Collect 
 
 ## Features
 
-- **Team Management** - Create scouting teams, invite members, manage roles (Mentor/Member)
+- **Team Management** - Create scouting teams, invite members, manage roles (Mentor/Leader/Student/Friend)
 - **Match Scouting** - Mobile-first forms for recording quantitative match data
+- **Alliance Deduction** - Auto-estimate partner robot scores from official FTC match data
+- **Editable Entries** - Fix scouting mistakes with inline editing
 - **Team Notes** - Qualitative observations with reliability/driver skill ratings
 - **EPA Rankings** - Expected Points Added calculations with trend analysis
 - **OPR Rankings** - Offensive Power Rating via iterative least squares
 - **Match Predictions** - Win probability and score predictions using EPA
 - **FTC API Integration** - Live event data, schedules, and results
+- **PWA + Offline** - Installable app with offline scouting and auto-sync
 
 **Current Season:** DECODE (2025-2026)
 
@@ -137,7 +140,51 @@ Combines EPA values to predict alliance scores and win probabilities using a log
 | `GET /api/analytics/opr` | OPR rankings |
 | `GET /api/analytics/predict` | Match prediction |
 | `POST /api/scouting/entries` | Submit scouting data |
+| `PATCH /api/scouting/entries/:id` | Update scouting entry |
+| `POST /api/scouting/entries/:id/deduct-partner` | Deduct alliance partner scores |
 | `POST /api/scouting/notes` | Submit team notes |
+
+## Team Roles
+
+| Role | Privileges |
+|------|-----------|
+| **Mentor** | Full admin: manage settings, invites, members, roles, scouting |
+| **Leader** | Full admin: same as Mentor |
+| **Student** | Regular member: scout, view data, update own role |
+| **Friend** | View-only: can view team data but cannot scout |
+
+## PWA & Offline Scouting
+
+FTC Metrics is a Progressive Web App designed for use at competitions where connectivity is unreliable.
+
+### Installing
+
+- **iOS**: Open in Safari > Share button > "Add to Home Screen"
+- **Android**: Open in Chrome > Menu > "Install app"
+- **Desktop**: Click the install icon in the address bar
+
+### Offline Mode
+
+Scouting entries are queued locally in IndexedDB when offline and sync automatically when connectivity returns.
+
+- **Green dot** = Online, data submits immediately
+- **Red dot** = Offline, data queues locally
+- **Yellow badge** = Number of pending entries waiting to sync
+- **Sync Now** button available for manual sync
+
+### Technical Details
+
+- Uses `@ducanh2912/next-pwa` for service worker generation
+- IndexedDB stores queued entries (persists across browser restarts)
+- Auto-sync triggers on `online` event
+- Service worker disabled in development, enabled in production builds
+- Requires HTTPS for full service worker support (except localhost)
+
+### Offline Limitations
+
+- Event team lists must be loaded while online
+- Analytics and match schedules require connectivity
+- IndexedDB may not work in private/incognito mode
 
 ## Contributing
 
