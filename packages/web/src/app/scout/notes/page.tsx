@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import Link from "next/link";
 import { teamsApi, eventsApi, scoutingApi } from "@/lib/api";
 
@@ -38,7 +38,7 @@ function NotesContent() {
   const preselectedTeam = searchParams.get("team") || "";
 
   const [teams, setTeams] = useState<UserTeam[]>([]);
-  const [events, setEvents] = useState<Array<{ eventCode: string; name: string }>>([]);
+  const [events, setEvents] = useState<Array<{ code: string; name: string }>>([]);
   const [selectedTeam, setSelectedTeam] = useState(preselectedTeam);
   const [selectedEvent, setSelectedEvent] = useState("");
   const [notes, setNotes] = useState<ScoutingNote[]>([]);
@@ -89,7 +89,7 @@ function NotesContent() {
       try {
         const result = await eventsApi.getEvents();
         if (result.success && result.data) {
-          setEvents(result.data.map((e) => ({ eventCode: e.eventCode, name: e.name })));
+          setEvents(result.data.map((e) => ({ code: e.code, name: e.name })));
         }
       } catch (err) {
         console.error("Failed to fetch events:", err);
@@ -258,18 +258,11 @@ function NotesContent() {
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
           <label className="block text-sm font-medium mb-2">Filter by Event</label>
-          <select
-            value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
-          >
-            <option value="">All Events</option>
-            {events.map((event) => (
-              <option key={event.eventCode} value={event.eventCode}>
-                {event.name}
-              </option>
-            ))}
-          </select>
+          <EventDropdown
+            events={events}
+            selectedEvent={selectedEvent}
+            onSelect={setSelectedEvent}
+          />
         </div>
       </div>
 
@@ -444,6 +437,142 @@ function NotesContent() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EventDropdown({
+  events,
+  selectedEvent,
+  onSelect,
+}: {
+  events: Array<{ code: string; name: string }>;
+  selectedEvent: string;
+  onSelect: (code: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const selectedName = events.find((e) => e.code === selectedEvent)?.name || "All Events";
+
+  const filtered = events.filter((event) => {
+    if (!search) return true;
+    const query = search.toLowerCase();
+    return (
+      event.name.toLowerCase().includes(query) ||
+      event.code.toLowerCase().includes(query)
+    );
+  });
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch("");
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [open]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-left flex items-center justify-between"
+      >
+        <span className={selectedEvent ? "" : "text-gray-500 dark:text-gray-400"}>
+          {selectedName}
+        </span>
+        <svg
+          className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+          <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+            <div className="relative">
+              <svg
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              <input
+                ref={inputRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search events..."
+                className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange"
+              />
+            </div>
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => {
+                onSelect("");
+                setOpen(false);
+                setSearch("");
+              }}
+              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                !selectedEvent ? "text-ftc-orange font-medium" : ""
+              }`}
+            >
+              All Events
+            </button>
+            {filtered.map((event) => (
+              <button
+                key={event.code}
+                type="button"
+                onClick={() => {
+                  onSelect(event.code);
+                  setOpen(false);
+                  setSearch("");
+                }}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                  selectedEvent === event.code ? "text-ftc-orange font-medium" : ""
+                }`}
+              >
+                <span className="block truncate">{event.name}</span>
+                <span className="block text-xs font-mono text-gray-400">{event.code}</span>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <p className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400 text-center">
+                No events found
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>
