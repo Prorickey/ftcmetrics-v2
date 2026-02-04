@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { teamsApi, eventsApi, scoutingApi } from "@/lib/api";
@@ -42,6 +42,7 @@ interface ScoutingEntry {
   teleopPatternCount: number;
   teleopMotifCount: number;
   endgameBaseStatus: "NONE" | "PARTIAL" | "FULL";
+  allianceNotes: string | null;
   autoScore: number;
   teleopScore: number;
   endgameScore: number;
@@ -58,6 +59,32 @@ interface ScoutingEntry {
     image: string | null;
   };
 }
+
+interface ScoutingNote {
+  id: string;
+  eventCode: string | null;
+  reliabilityRating: number | null;
+  driverSkillRating: number | null;
+  defenseRating: number | null;
+  strategyNotes: string | null;
+  mechanicalNotes: string | null;
+  generalNotes: string | null;
+  createdAt: string;
+  aboutTeam: {
+    id: string;
+    teamNumber: number;
+    name: string;
+  };
+  author: {
+    id: string;
+    name: string;
+    image: string | null;
+  };
+}
+
+type FeedItem =
+  | { type: "entry"; data: ScoutingEntry }
+  | { type: "note"; data: ScoutingNote };
 
 interface EditFormData {
   matchNumber: number;
@@ -430,25 +457,31 @@ function EditEntryForm({
 function ScoutContent() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const preselectedTeamId = searchParams.get("team");
+  const preselectedEvent = searchParams.get("event");
+  const preselectedTeamNumber = searchParams.get("teamNumber");
 
   const [teams, setTeams] = useState<UserTeam[]>([]);
   const [events, setEvents] = useState<FTCEvent[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>("");
-  const [selectedEventCode, setSelectedEventCode] = useState<string>("");
+  const [selectedEventCode, setSelectedEventCode] = useState<string>(preselectedEvent || "");
   const [loading, setLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(false);
 
   // Scouting entries state
   const [entries, setEntries] = useState<ScoutingEntry[]>([]);
+  const [notes, setNotes] = useState<ScoutingNote[]>([]);
   const [entriesLoading, setEntriesLoading] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [deductingId, setDeductingId] = useState<string | null>(null);
   const [deductMessage, setDeductMessage] = useState<{ id: string; text: string; type: "success" | "error" } | null>(null);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [showUpcomingOnly, setShowUpcomingOnly] = useState(true);
+  const [recentEventCodes, setRecentEventCodes] = useState<string[]>([]);
 
   useEffect(() => {
     async function fetchTeams() {
@@ -475,6 +508,14 @@ function ScoutContent() {
     fetchTeams();
   }, [session?.user?.id, preselectedTeamId]);
 
+  // Auto-redirect to match form when coming from analytics page
+  useEffect(() => {
+    if (selectedTeam && preselectedEvent && preselectedTeamNumber) {
+      const url = `/scout/match?team=${selectedTeam}&event=${preselectedEvent}&scoutedTeam=${preselectedTeamNumber}`;
+      router.replace(url);
+    }
+  }, [selectedTeam, preselectedEvent, preselectedTeamNumber, router]);
+
   useEffect(() => {
     async function fetchEvents() {
       setEventsLoading(true);
@@ -498,16 +539,32 @@ function ScoutContent() {
     fetchEvents();
   }, []);
 
-  // Fetch scouting entries for the selected team
+  // Load recent events from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("ftcmetrics-recent-events");
+      if (stored) {
+        setRecentEventCodes(JSON.parse(stored));
+      }
+    } catch {}
+  }, []);
+
+  // Fetch scouting entries and notes for the selected team
   const fetchEntries = useCallback(async () => {
     if (!session?.user?.id || !selectedTeam) return;
     setEntriesLoading(true);
     try {
-      const result = await scoutingApi.getEntries(session.user.id, {
-        scoutingTeamId: selectedTeam,
-      });
-      if (result.success && result.data) {
-        setEntries(result.data as ScoutingEntry[]);
+      const [entriesResult, notesResult] = await Promise.all([
+        scoutingApi.getEntries(session.user.id, {
+          scoutingTeamId: selectedTeam,
+        }),
+        scoutingApi.getNotes({ notingTeamId: selectedTeam }),
+      ]);
+      if (entriesResult.success && entriesResult.data) {
+        setEntries(entriesResult.data as ScoutingEntry[]);
+      }
+      if (notesResult.success && notesResult.data) {
+        setNotes(notesResult.data as ScoutingNote[]);
       }
     } catch (err) {
       console.error("Failed to fetch entries:", err);
@@ -519,6 +576,39 @@ function ScoutContent() {
   useEffect(() => {
     fetchEntries();
   }, [fetchEntries]);
+
+  // Retry alliance deductions when entries finish loading (picks up newly available match data)
+  useEffect(() => {
+    if (entriesLoading || !session?.user?.id || !selectedTeam || entries.length === 0) return;
+
+    let cancelled = false;
+
+    async function retryDeductions() {
+      const eventCodes = [...new Set(entries.map((e) => e.eventCode))];
+
+      for (const eventCode of eventCodes) {
+        if (cancelled) return;
+        try {
+          const result = await scoutingApi.retryDeductions(session!.user!.id, {
+            eventCode,
+            scoutingTeamId: selectedTeam,
+          });
+          if (!cancelled && result.success && result.data && result.data.deducted > 0) {
+            fetchEntries();
+            return;
+          }
+        } catch {
+          // Silent failure — deductions will be retried on next page load
+        }
+      }
+    }
+
+    retryDeductions();
+
+    return () => { cancelled = true; };
+    // Only run once after entries first load for this team — not on entries changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entriesLoading, session?.user?.id, selectedTeam]);
 
   // Handle manual deduct partner action
   const handleDeductPartner = async (entryId: string) => {
@@ -545,10 +635,24 @@ function ScoutContent() {
     }
   };
 
+  // Save recently clicked event to localStorage
+  const handleSelectEvent = useCallback((code: string) => {
+    setSelectedEventCode(code);
+    if (code) {
+      setRecentEventCodes((prev) => {
+        const updated = [code, ...prev.filter((c) => c !== code)].slice(0, 5);
+        try {
+          localStorage.setItem("ftcmetrics-recent-events", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
+  }, []);
+
   // Filter events based on search and date filter
   const filteredEvents = useMemo(() => {
     const now = new Date();
-    return events.filter((event) => {
+    const filtered = events.filter((event) => {
       // Date filter
       if (showUpcomingOnly && new Date(event.dateEnd) < now) {
         return false;
@@ -567,7 +671,35 @@ function ScoutContent() {
 
       return true;
     });
-  }, [events, searchQuery, showUpcomingOnly]);
+
+    // Sort recent events to the top when not searching
+    if (!searchQuery && recentEventCodes.length > 0) {
+      filtered.sort((a, b) => {
+        const aIdx = recentEventCodes.indexOf(a.code);
+        const bIdx = recentEventCodes.indexOf(b.code);
+        if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+        if (aIdx !== -1) return -1;
+        if (bIdx !== -1) return 1;
+        return 0;
+      });
+    }
+
+    return filtered;
+  }, [events, searchQuery, showUpcomingOnly, recentEventCodes]);
+
+  // Merge entries and notes into a single feed sorted by date
+  const feedItems = useMemo<FeedItem[]>(() => {
+    const items: FeedItem[] = [
+      ...entries.map((e) => ({ type: "entry" as const, data: e })),
+      ...notes.map((n) => ({ type: "note" as const, data: n })),
+    ];
+    items.sort(
+      (a, b) =>
+        new Date(b.data.createdAt).getTime() -
+        new Date(a.data.createdAt).getTime()
+    );
+    return items;
+  }, [entries, notes]);
 
   const selectedEvent = events.find((e) => e.code === selectedEventCode);
 
@@ -701,7 +833,7 @@ function ScoutContent() {
                   {filteredEvents.slice(0, 30).map((event) => (
                     <button
                       key={event.code}
-                      onClick={() => setSelectedEventCode(event.code)}
+                      onClick={() => handleSelectEvent(event.code)}
                       className={`w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
                         selectedEventCode === event.code
                           ? "bg-ftc-orange/10 border-l-4 border-ftc-orange"
@@ -710,7 +842,12 @@ function ScoutContent() {
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-medium text-sm">{event.name}</p>
+                          <p className="font-medium text-sm">
+                            {event.name}
+                            {recentEventCodes.includes(event.code) && (
+                              <span className="ml-2 text-xs font-medium text-ftc-orange">Recent</span>
+                            )}
+                          </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">
                             {event.city}, {event.stateprov}
                           </p>
@@ -773,9 +910,9 @@ function ScoutContent() {
         </button>
       )}
 
-      {/* Recent Entries */}
+      {/* Recent Entries & Notes */}
       <div className="mt-8 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-        <h2 className="font-semibold text-lg mb-4">Recent Scouting Entries</h2>
+        <h2 className="font-semibold text-lg mb-4">Recent Activity</h2>
         {entriesLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
@@ -785,104 +922,328 @@ function ScoutContent() {
               />
             ))}
           </div>
-        ) : entries.length === 0 ? (
+        ) : feedItems.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <p>No entries yet</p>
-            <p className="text-sm mt-1">Your scouting submissions will appear here</p>
+            <p className="text-sm mt-1">Your scouting submissions and notes will appear here</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {entries.map((entry) => (
-              <div
-                key={entry.id}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold">
-                        Team {entry.scoutedTeam.teamNumber}
-                      </span>
-                      <span
-                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          entry.alliance === "RED"
-                            ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-                            : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                        }`}
-                      >
-                        {entry.alliance}
-                      </span>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        Match {entry.matchNumber}
-                      </span>
+            {feedItems.map((item) => {
+              if (item.type === "entry") {
+                const entry = item.data;
+                const isExpanded = expandedItemId === entry.id && editingEntryId !== entry.id;
+
+                return (
+                  <div
+                    key={entry.id}
+                    className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                    onClick={() => {
+                      if (editingEntryId === entry.id) return;
+                      setExpandedItemId(expandedItemId === entry.id ? null : entry.id);
+                    }}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold">
+                            Team {entry.scoutedTeam.teamNumber}
+                          </span>
+                          <span
+                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              entry.alliance === "RED"
+                                ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                                : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                            }`}
+                          >
+                            {entry.alliance}
+                          </span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Match {entry.matchNumber}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                          <span className="font-mono text-xs">
+                            {entry.eventCode}
+                          </span>
+                          <span>
+                            {new Date(entry.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 mt-2 text-sm">
+                          <span className="text-ftc-orange">
+                            Auto: {entry.autoScore}
+                          </span>
+                          <span className="text-ftc-blue">
+                            Teleop: {entry.teleopScore}
+                          </span>
+                          <span className="text-green-500">
+                            End: {entry.endgameScore}
+                          </span>
+                          <span className="font-bold">
+                            Total: {entry.totalScore}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                        {editingEntryId !== entry.id && (
+                          <>
+                            {deductMessage?.id === entry.id && (
+                              <span
+                                className={`text-xs ${
+                                  deductMessage.type === "success"
+                                    ? "text-green-600 dark:text-green-400"
+                                    : "text-red-500 dark:text-red-400"
+                                }`}
+                              >
+                                {deductMessage.text}
+                              </span>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingEntryId(entry.id);
+                                setExpandedItemId(null);
+                              }}
+                              className="px-3 py-1.5 text-sm font-medium text-ftc-orange bg-ftc-orange/10 rounded-lg hover:bg-ftc-orange/20 transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeductPartner(entry.id);
+                              }}
+                              disabled={deductingId === entry.id}
+                              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                            >
+                              {deductingId === entry.id ? "Deducting..." : "Deduct Partner"}
+                            </button>
+                          </>
+                        )}
+                        <svg
+                          className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      <span className="font-mono text-xs">
-                        {entry.eventCode}
-                      </span>
-                      <span>
-                        {new Date(entry.createdAt).toLocaleDateString()}
-                      </span>
+
+                    {/* Expanded scoring breakdown */}
+                    {isExpanded && (
+                      <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4 space-y-3">
+                        {/* Autonomous */}
+                        <div>
+                          <p className="text-xs font-semibold text-ftc-orange uppercase tracking-wide mb-2">Autonomous — {entry.autoScore} pts</p>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="flex justify-between bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-600 dark:text-gray-400">Leave</span>
+                              <span className="font-medium">{entry.autoLeave ? "Yes (3)" : "No (0)"}</span>
+                            </div>
+                            <div className="flex justify-between bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-600 dark:text-gray-400">Classified</span>
+                              <span className="font-medium">{entry.autoClassifiedCount} ({entry.autoClassifiedCount * 3})</span>
+                            </div>
+                            <div className="flex justify-between bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-600 dark:text-gray-400">Overflow</span>
+                              <span className="font-medium">{entry.autoOverflowCount} ({entry.autoOverflowCount})</span>
+                            </div>
+                            <div className="flex justify-between bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-600 dark:text-gray-400">Pattern</span>
+                              <span className="font-medium">{entry.autoPatternCount} ({entry.autoPatternCount * 2})</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Teleop */}
+                        <div>
+                          <p className="text-xs font-semibold text-ftc-blue uppercase tracking-wide mb-2">Teleop — {entry.teleopScore} pts</p>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="flex justify-between bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-600 dark:text-gray-400">Classified</span>
+                              <span className="font-medium">{entry.teleopClassifiedCount} ({entry.teleopClassifiedCount * 3})</span>
+                            </div>
+                            <div className="flex justify-between bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-600 dark:text-gray-400">Overflow</span>
+                              <span className="font-medium">{entry.teleopOverflowCount} ({entry.teleopOverflowCount})</span>
+                            </div>
+                            <div className="flex justify-between bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-600 dark:text-gray-400">Depot</span>
+                              <span className="font-medium">{entry.teleopDepotCount} ({entry.teleopDepotCount})</span>
+                            </div>
+                            <div className="flex justify-between bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-600 dark:text-gray-400">Pattern</span>
+                              <span className="font-medium">{entry.teleopPatternCount} ({entry.teleopPatternCount * 2})</span>
+                            </div>
+                            <div className="flex justify-between bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-600 dark:text-gray-400">Motif</span>
+                              <span className="font-medium">{entry.teleopMotifCount} ({entry.teleopMotifCount * 2})</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Endgame */}
+                        <div>
+                          <p className="text-xs font-semibold text-green-500 uppercase tracking-wide mb-2">Endgame — {entry.endgameScore} pts</p>
+                          <div className="text-sm bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5 inline-block">
+                            <span className="text-gray-600 dark:text-gray-400">Base: </span>
+                            <span className="font-medium">{entry.endgameBaseStatus}</span>
+                          </div>
+                        </div>
+
+                        {/* Alliance Notes */}
+                        {entry.allianceNotes && (
+                          <div>
+                            <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide mb-2">Alliance Notes</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded px-3 py-2">
+                              {entry.allianceNotes}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Scouter info */}
+                        <div className="text-xs text-gray-400 dark:text-gray-500">
+                          Scouted by {entry.scouter.name}
+                        </div>
+                      </div>
+                    )}
+
+                    {editingEntryId === entry.id && session?.user?.id && (
+                      <EditEntryForm
+                        entry={entry}
+                        userId={session.user.id}
+                        onSave={() => {
+                          setEditingEntryId(null);
+                          fetchEntries();
+                        }}
+                        onCancel={() => setEditingEntryId(null)}
+                      />
+                    )}
+                  </div>
+                );
+              }
+
+              // Note card
+              const note = item.data;
+              const isExpanded = expandedItemId === note.id;
+
+              return (
+                <div
+                  key={note.id}
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                  onClick={() => setExpandedItemId(expandedItemId === note.id ? null : note.id)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Purple notebook icon */}
+                        <svg
+                          className="w-4 h-4 text-purple-500 flex-shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="font-semibold">
+                          Team {note.aboutTeam.teamNumber}
+                        </span>
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+                          Note
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        {note.eventCode && (
+                          <span className="font-mono text-xs">{note.eventCode}</span>
+                        )}
+                        <span>
+                          {new Date(note.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {/* Preview text */}
+                      {!isExpanded && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 truncate">
+                          {note.generalNotes || note.strategyNotes || note.mechanicalNotes || "No notes"}
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-4 mt-2 text-sm">
-                      <span className="text-ftc-orange">
-                        Auto: {entry.autoScore}
-                      </span>
-                      <span className="text-ftc-blue">
-                        Teleop: {entry.teleopScore}
-                      </span>
-                      <span className="text-green-500">
-                        End: {entry.endgameScore}
-                      </span>
-                      <span className="font-bold">
-                        Total: {entry.totalScore}
-                      </span>
-                    </div>
+
+                    <svg
+                      className={`w-5 h-5 text-gray-400 ml-3 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
 
-                  {editingEntryId !== entry.id && (
-                    <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-                      {deductMessage?.id === entry.id && (
-                        <span
-                          className={`text-xs ${
-                            deductMessage.type === "success"
-                              ? "text-green-600 dark:text-green-400"
-                              : "text-red-500 dark:text-red-400"
-                          }`}
-                        >
-                          {deductMessage.text}
-                        </span>
+                  {/* Expanded note content */}
+                  {isExpanded && (
+                    <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4 space-y-3">
+                      {/* Ratings */}
+                      {(note.reliabilityRating || note.driverSkillRating || note.defenseRating) && (
+                        <div className="flex gap-4 text-sm">
+                          {note.reliabilityRating && (
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-500 dark:text-gray-400">Reliability: </span>
+                              <span className="font-medium">{note.reliabilityRating}/5</span>
+                            </div>
+                          )}
+                          {note.driverSkillRating && (
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-500 dark:text-gray-400">Driver Skill: </span>
+                              <span className="font-medium">{note.driverSkillRating}/5</span>
+                            </div>
+                          )}
+                          {note.defenseRating && (
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded px-3 py-1.5">
+                              <span className="text-gray-500 dark:text-gray-400">Defense: </span>
+                              <span className="font-medium">{note.defenseRating}/5</span>
+                            </div>
+                          )}
+                        </div>
                       )}
-                      <button
-                        onClick={() => setEditingEntryId(entry.id)}
-                        className="px-3 py-1.5 text-sm font-medium text-ftc-orange bg-ftc-orange/10 rounded-lg hover:bg-ftc-orange/20 transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeductPartner(entry.id)}
-                        disabled={deductingId === entry.id}
-                        className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      >
-                        {deductingId === entry.id ? "Deducting..." : "Deduct Partner"}
-                      </button>
+
+                      {/* Notes sections */}
+                      {note.strategyNotes && (
+                        <div>
+                          <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide mb-1">Strategy</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded px-3 py-2">
+                            {note.strategyNotes}
+                          </p>
+                        </div>
+                      )}
+                      {note.mechanicalNotes && (
+                        <div>
+                          <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide mb-1">Mechanical</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded px-3 py-2">
+                            {note.mechanicalNotes}
+                          </p>
+                        </div>
+                      )}
+                      {note.generalNotes && (
+                        <div>
+                          <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide mb-1">General</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded px-3 py-2">
+                            {note.generalNotes}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Author info */}
+                      <div className="text-xs text-gray-400 dark:text-gray-500">
+                        By {note.author.name}
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {editingEntryId === entry.id && session?.user?.id && (
-                  <EditEntryForm
-                    entry={entry}
-                    userId={session.user.id}
-                    onSave={() => {
-                      setEditingEntryId(null);
-                      fetchEntries();
-                    }}
-                    onCancel={() => setEditingEntryId(null)}
-                  />
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
