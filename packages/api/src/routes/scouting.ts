@@ -100,11 +100,69 @@ async function performAllianceDeduction(entryId: string): Promise<{
     }
   }
 
+  // 3. If FTC API didn't have scores, fall back to database Match records
   if (!matchScore) {
-    return { success: false, error: "Match scores not available from FTC API" };
+    const dbMatch = await prisma.match.findFirst({
+      where: { eventCode, matchNumber },
+    });
+
+    if (dbMatch && dbMatch.redScore !== null && dbMatch.blueScore !== null) {
+      const isRed = alliance === "RED";
+      matchScore = {
+        matchLevel: dbMatch.tournamentLevel,
+        matchNumber: dbMatch.matchNumber,
+        matchSeries: 1,
+        alliances: [
+          {
+            alliance: "Red" as const,
+            totalPoints: dbMatch.redScore,
+            autoPoints: 0,
+            dcPoints: 0,
+            endgamePoints: 0,
+            penaltyPointsCommitted: 0,
+            prePenaltyTotal: dbMatch.redScore,
+            team1: dbMatch.red1,
+            team2: dbMatch.red2,
+          },
+          {
+            alliance: "Blue" as const,
+            totalPoints: dbMatch.blueScore,
+            autoPoints: 0,
+            dcPoints: 0,
+            endgamePoints: 0,
+            penaltyPointsCommitted: 0,
+            prePenaltyTotal: dbMatch.blueScore,
+            team1: dbMatch.blue1,
+            team2: dbMatch.blue2,
+          },
+        ],
+      };
+
+      // Try to extract phase breakdown from scoreDetails if available
+      if (dbMatch.scoreDetails) {
+        try {
+          const details = dbMatch.scoreDetails as Record<string, unknown>;
+          const alliances = (details.alliances || details.matchScores) as Array<Record<string, unknown>> | undefined;
+          if (Array.isArray(alliances)) {
+            for (const a of alliances) {
+              const key = a.alliance === "Red" ? 0 : 1;
+              if (typeof a.autoPoints === "number") matchScore.alliances[key].autoPoints = a.autoPoints;
+              if (typeof a.dcPoints === "number") matchScore.alliances[key].dcPoints = a.dcPoints;
+              if (typeof a.endgamePoints === "number") matchScore.alliances[key].endgamePoints = a.endgamePoints;
+            }
+          }
+        } catch {
+          // scoreDetails format unrecognized, use totals only
+        }
+      }
+    }
   }
 
-  // 3. Find the alliance data for this entry's alliance (RED or BLUE)
+  if (!matchScore) {
+    return { success: false, error: "Match scores not available from FTC API or database" };
+  }
+
+  // 4. Find the alliance data for this entry's alliance (RED or BLUE)
   const allianceKey = alliance === "RED" ? "Red" : "Blue";
   const allianceData = matchScore.alliances.find(
     (a) => a.alliance === allianceKey
@@ -114,17 +172,40 @@ async function performAllianceDeduction(entryId: string): Promise<{
     return { success: false, error: "Alliance data not found in match scores" };
   }
 
-  // 4. Determine which team is the partner
-  const partnerTeamNumber =
-    allianceData.team1 === scoutedTeamNumber
-      ? allianceData.team2
-      : allianceData.team1;
+  // 5. Determine which team is the partner
+  // team1/team2 may be missing from score data (DECODE API returns team: 0)
+  let team1 = allianceData.team1;
+  let team2 = allianceData.team2;
 
-  if (partnerTeamNumber === scoutedTeamNumber) {
+  // If team numbers are missing from scores, look them up from the match schedule
+  if (!team1 || !team2) {
+    try {
+      const level = matchScore.matchLevel?.includes("QUAL") ? "qual" as const : "playoff" as const;
+      const scheduleResult = await getFTCApi().getMatches(eventCode, level);
+      const matchInfo = scheduleResult.matches?.find(
+        (m) => m.matchNumber === matchNumber
+      );
+      if (matchInfo?.teams) {
+        const station1 = alliance === "RED" ? "Red1" : "Blue1";
+        const station2 = alliance === "RED" ? "Red2" : "Blue2";
+        const t1 = matchInfo.teams.find((t) => t.station === station1);
+        const t2 = matchInfo.teams.find((t) => t.station === station2);
+        if (t1) team1 = t1.teamNumber;
+        if (t2) team2 = t2.teamNumber;
+      }
+    } catch {
+      // Schedule lookup failed, continue with what we have
+    }
+  }
+
+  const partnerTeamNumber =
+    team1 === scoutedTeamNumber ? team2 : team1;
+
+  if (!partnerTeamNumber || partnerTeamNumber === scoutedTeamNumber) {
     return { success: false, error: "Could not identify partner team" };
   }
 
-  // 5. Check if a scouting entry already exists for the partner in this match
+  // 6. Check if a scouting entry already exists for the partner in this match
   let partnerTeam = await prisma.team.findUnique({
     where: { teamNumber: partnerTeamNumber },
   });
@@ -147,13 +228,36 @@ async function performAllianceDeduction(entryId: string): Promise<{
     }
   }
 
-  // 6. Calculate deducted scores
-  const partnerAutoScore = Math.max(0, allianceData.autoPoints - entry.autoScore);
-  const partnerTeleopScore = Math.max(0, allianceData.dcPoints - entry.teleopScore);
-  const partnerEndgameScore = Math.max(0, allianceData.endgamePoints - entry.endgameScore);
-  const partnerTotalScore = partnerAutoScore + partnerTeleopScore + partnerEndgameScore;
+  // 7. Calculate deducted scores
+  // If phase breakdown available, deduct per-phase; otherwise deduct from total
+  let partnerAutoScore: number;
+  let partnerTeleopScore: number;
+  let partnerEndgameScore: number;
+  let partnerTotalScore: number;
 
-  // 7. Get or create the partner team
+  // DECODE API uses teleopPoints (includes endgame base) instead of dcPoints + endgamePoints
+  const allianceAutoPoints = allianceData.autoPoints || 0;
+  const allianceTeleopPoints = allianceData.dcPoints || (allianceData as Record<string, unknown>).teleopPoints as number || 0;
+  const allianceEndgamePoints = allianceData.endgamePoints || (allianceData as Record<string, unknown>).teleopBasePoints as number || 0;
+  // If teleopPoints includes endgame (DECODE), subtract endgame from teleop to avoid double-counting
+  const teleopOnly = allianceData.dcPoints ? allianceTeleopPoints : Math.max(0, allianceTeleopPoints - allianceEndgamePoints);
+
+  const hasPhaseBreakdown = allianceAutoPoints > 0 || teleopOnly > 0 || allianceEndgamePoints > 0;
+
+  if (hasPhaseBreakdown) {
+    partnerAutoScore = Math.max(0, allianceAutoPoints - entry.autoScore);
+    partnerTeleopScore = Math.max(0, teleopOnly - entry.teleopScore);
+    partnerEndgameScore = Math.max(0, allianceEndgamePoints - entry.endgameScore);
+    partnerTotalScore = partnerAutoScore + partnerTeleopScore + partnerEndgameScore;
+  } else {
+    // Only total alliance score available — deduct from total
+    partnerAutoScore = 0;
+    partnerTeleopScore = 0;
+    partnerEndgameScore = 0;
+    partnerTotalScore = Math.max(0, allianceData.totalPoints - entry.totalScore);
+  }
+
+  // 8. Get or create the partner team
   if (!partnerTeam) {
     partnerTeam = await prisma.team.create({
       data: {
@@ -163,7 +267,7 @@ async function performAllianceDeduction(entryId: string): Promise<{
     });
   }
 
-  // 8. Create the deducted scouting entry for the partner
+  // 9. Create the deducted scouting entry for the partner
   const partnerEntry = await prisma.scoutingEntry.create({
     data: {
       scouterId: entry.scouterId,
@@ -183,6 +287,8 @@ async function performAllianceDeduction(entryId: string): Promise<{
       teleopPatternCount: 0,
       teleopMotifCount: 0,
       endgameBaseStatus: "NONE",
+      // Copy alliance notes from the original entry
+      allianceNotes: entry.allianceNotes,
       // Deducted computed scores
       autoScore: partnerAutoScore,
       teleopScore: partnerTeleopScore,
@@ -235,6 +341,7 @@ scouting.post("/entries", async (c) => {
       teleopPatternCount = 0,
       teleopMotifCount = 0,
       endgameBaseStatus = "NONE",
+      allianceNotes,
     } = body;
 
     // Validate required fields
@@ -333,26 +440,33 @@ scouting.post("/entries", async (c) => {
         teleopPatternCount,
         teleopMotifCount,
         endgameBaseStatus,
+        allianceNotes: allianceNotes || null,
         ...scores,
       },
     });
 
-    // Auto-deduct partner entry in the background (non-blocking)
+    // Auto-deduct partner entry
     const autoDeduct = c.req.query("autoDeduct") !== "false";
+    let deduction: { success: boolean; error?: string } = { success: false, error: "skipped" };
     if (autoDeduct) {
-      performAllianceDeduction(entry.id).catch((err) => {
-        console.error("Auto-deduction failed (non-blocking):", err);
-      });
+      try {
+        deduction = await performAllianceDeduction(entry.id);
+      } catch (err) {
+        console.error("Auto-deduction failed:", err);
+        deduction = { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+      }
     }
 
     return c.json({
       success: true,
       data: entry,
+      deduction,
     });
   } catch (error) {
     console.error("Error creating scouting entry:", error);
+    const message = error instanceof Error ? error.message : "Failed to create scouting entry";
     return c.json(
-      { success: false, error: "Failed to create scouting entry" },
+      { success: false, error: message },
       500
     );
   }
@@ -541,6 +655,9 @@ scouting.patch("/entries/:id", async (c) => {
     if (body.alliance !== undefined) {
       updateData.alliance = body.alliance;
     }
+    if (body.allianceNotes !== undefined) {
+      updateData.allianceNotes = body.allianceNotes || null;
+    }
 
     const updated = await prisma.scoutingEntry.update({
       where: { id },
@@ -625,6 +742,79 @@ scouting.post("/entries/:id/deduct-partner", async (c) => {
     console.error("Error performing alliance deduction:", error);
     return c.json(
       { success: false, error: "Failed to perform alliance deduction" },
+      500
+    );
+  }
+});
+
+/**
+ * POST /api/scouting/retry-deductions
+ * Retry alliance deductions for entries that don't have partner entries yet.
+ * Called automatically when match data may have become available.
+ */
+scouting.post("/retry-deductions", async (c) => {
+  const userId = c.req.header("X-User-Id");
+
+  if (!userId) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
+
+  try {
+    const body = await c.req.json();
+    const { eventCode, scoutingTeamId } = body;
+
+    if (!eventCode || !scoutingTeamId) {
+      return c.json(
+        { success: false, error: "Missing eventCode or scoutingTeamId" },
+        400
+      );
+    }
+
+    // Verify user is a member of the scouting team
+    const membership = await prisma.teamMember.findUnique({
+      where: {
+        userId_teamId: { userId, teamId: scoutingTeamId },
+      },
+    });
+
+    if (!membership) {
+      return c.json(
+        { success: false, error: "Not a member of scouting team" },
+        403
+      );
+    }
+
+    // Find all entries for this team at this event
+    const entries = await prisma.scoutingEntry.findMany({
+      where: { eventCode, scoutingTeamId },
+      select: { id: true },
+    });
+
+    let deducted = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const entry of entries) {
+      const result = await performAllianceDeduction(entry.id);
+      if (result.success) {
+        deducted++;
+      } else if (
+        result.error === "Scouting entry already exists for partner team in this match"
+      ) {
+        skipped++;
+      } else {
+        failed++;
+      }
+    }
+
+    return c.json({
+      success: true,
+      data: { deducted, skipped, failed, total: entries.length },
+    });
+  } catch (error) {
+    console.error("Error retrying deductions:", error);
+    return c.json(
+      { success: false, error: "Failed to retry deductions" },
       500
     );
   }
