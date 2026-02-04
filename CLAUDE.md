@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FTC Metrics v2 is a scouting and analytics platform for FIRST Tech Challenge (FTC) teams. It enables teams to collect match data from scouts, fetches official match statistics from the FTC Events API, and computes advanced analytics (EPA/OPR) to understand team performance.
+FTC Metrics is a scouting and analytics platform for FIRST Tech Challenge (FTC) teams. It enables teams to collect match data from scouts, fetches official match statistics from the FTC Events API, and computes advanced analytics (EPA/OPR) to understand team performance.
 
 **Current Season:** DECODE 2025-2026
 
