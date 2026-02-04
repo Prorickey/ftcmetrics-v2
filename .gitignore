@@ -39,6 +39,7 @@ bun-debug.log*
 # Testing
 coverage/
 .nyc_output/
+.playwright-mcp/
 
 # Misc
 *.tsbuildinfo
