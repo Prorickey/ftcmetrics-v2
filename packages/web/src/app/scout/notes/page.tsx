@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef, Suspense } from "react";
 import Link from "next/link";
-import { teamsApi, eventsApi, scoutingApi } from "@/lib/api";
+import { teamsApi, eventsApi, scoutingApi, ftcTeamsApi } from "@/lib/api";
 
 interface UserTeam {
   teamId: string;
@@ -49,6 +49,7 @@ function NotesContent() {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     aboutTeamNumber: "",
+    formEventCode: "",
     reliabilityRating: 3,
     driverSkillRating: 3,
     defenseRating: 3,
@@ -59,6 +60,9 @@ function NotesContent() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [teamEvents, setTeamEvents] = useState<Array<{ eventCode: string; eventName: string }>>([]);
+  const [formEventTeams, setFormEventTeams] = useState<Array<{ teamNumber: number; nameShort: string; nameFull: string }>>([]);
+  const [formEventTeamsLoading, setFormEventTeamsLoading] = useState(false);
 
   // Fetch user's teams
   useEffect(() => {
@@ -97,6 +101,53 @@ function NotesContent() {
     }
     fetchEvents();
   }, []);
+
+  // Fetch selected team's competitions
+  useEffect(() => {
+    async function fetchTeamEvents() {
+      if (!selectedTeam) {
+        setTeamEvents([]);
+        return;
+      }
+      const team = teams.find((t) => t.teamId === selectedTeam);
+      if (!team) return;
+      try {
+        const result = await ftcTeamsApi.getTeamEventSummaries(team.team.teamNumber);
+        if (result.success && result.data) {
+          setTeamEvents(
+            result.data.map((e) => ({ eventCode: e.eventCode, eventName: e.eventName }))
+          );
+        }
+      } catch (err) {
+        console.error("Failed to fetch team events:", err);
+      }
+    }
+    fetchTeamEvents();
+  }, [selectedTeam, teams]);
+
+  // Fetch teams at the selected form event
+  useEffect(() => {
+    async function fetchFormEventTeams() {
+      if (!formData.formEventCode) {
+        setFormEventTeams([]);
+        return;
+      }
+      setFormEventTeamsLoading(true);
+      try {
+        const result = await eventsApi.getEventTeams(formData.formEventCode);
+        if (result.success && result.data) {
+          setFormEventTeams(
+            result.data.sort((a, b) => a.teamNumber - b.teamNumber)
+          );
+        }
+      } catch (err) {
+        console.error("Failed to fetch event teams:", err);
+      } finally {
+        setFormEventTeamsLoading(false);
+      }
+    }
+    fetchFormEventTeams();
+  }, [formData.formEventCode]);
 
   // Fetch notes when filters change
   useEffect(() => {
@@ -139,7 +190,7 @@ function NotesContent() {
       const result = await scoutingApi.submitNote(session.user.id, {
         notingTeamId: selectedTeam,
         aboutTeamNumber: teamNumber,
-        eventCode: selectedEvent || undefined,
+        eventCode: formData.formEventCode || selectedEvent || undefined,
         reliabilityRating: formData.reliabilityRating,
         driverSkillRating: formData.driverSkillRating,
         defenseRating: formData.defenseRating,
@@ -151,15 +202,16 @@ function NotesContent() {
       if (result.success) {
         setSuccess(true);
         setShowForm(false);
-        setFormData({
+        setFormData((prev) => ({
           aboutTeamNumber: "",
+          formEventCode: prev.formEventCode,
           reliabilityRating: 3,
           driverSkillRating: 3,
           defenseRating: 3,
           strategyNotes: "",
           mechanicalNotes: "",
           generalNotes: "",
-        });
+        }));
         // Refresh notes
         const notesResult = await scoutingApi.getNotes({
           notingTeamId: selectedTeam,
@@ -278,16 +330,57 @@ function NotesContent() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">About Team Number</label>
-              <input
-                type="number"
-                value={formData.aboutTeamNumber}
-                onChange={(e) => setFormData({ ...formData, aboutTeamNumber: e.target.value })}
-                placeholder="e.g., 12345"
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
-                required
-              />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium mb-1">Competition</label>
+                <select
+                  value={formData.formEventCode}
+                  onChange={(e) =>
+                    setFormData({ ...formData, formEventCode: e.target.value, aboutTeamNumber: "" })
+                  }
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                >
+                  <option value="">No competition</option>
+                  {teamEvents.map((event) => (
+                    <option key={event.eventCode} value={event.eventCode}>
+                      {event.eventName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">About Team</label>
+                {formEventTeamsLoading ? (
+                  <div className="h-[42px] bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+                ) : formData.formEventCode && formEventTeams.length > 0 ? (
+                  <select
+                    value={formData.aboutTeamNumber}
+                    onChange={(e) =>
+                      setFormData({ ...formData, aboutTeamNumber: e.target.value })
+                    }
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                    required
+                  >
+                    <option value="">Select team</option>
+                    {formEventTeams.map((team) => (
+                      <option key={team.teamNumber} value={String(team.teamNumber)}>
+                        {team.teamNumber} - {team.nameShort || team.nameFull}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="number"
+                    value={formData.aboutTeamNumber}
+                    onChange={(e) =>
+                      setFormData({ ...formData, aboutTeamNumber: e.target.value })
+                    }
+                    placeholder="e.g., 12345"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                    required
+                  />
+                )}
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
