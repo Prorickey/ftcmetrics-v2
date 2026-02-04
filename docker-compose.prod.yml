@@ -1,0 +1,92 @@
+services:
+  web:
+    image: ghcr.io/ftc8569/ftcmetrics-web:latest
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ftcmetrics}:${POSTGRES_PASSWORD:-ftcmetrics}@postgres:5432/${POSTGRES_DB:-ftcmetrics}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/ftc8569/ftcmetrics-api:latest
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ftcmetrics}:${POSTGRES_PASSWORD:-ftcmetrics}@postgres:5432/${POSTGRES_DB:-ftcmetrics}
+      FTC_API_USERNAME: ${FTC_API_USERNAME}
+      FTC_API_TOKEN: ${FTC_API_TOKEN}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      PORT: 3001
+    volumes:
+      - uploads:/app/packages/api/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3001/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ftcmetrics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ftcmetrics}
+      POSTGRES_DB: ${POSTGRES_DB:-ftcmetrics}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ftcmetrics} -d ${POSTGRES_DB:-ftcmetrics}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  soketi:
+    image: quay.io/soketi/soketi:1.6-16-debian
+    environment:
+      SOKETI_DEFAULT_APP_ID: ${SOKETI_APP_ID:-ftcmetrics}
+      SOKETI_DEFAULT_APP_KEY: ${SOKETI_APP_KEY:-ftcmetrics-key}
+      SOKETI_DEFAULT_APP_SECRET: ${SOKETI_APP_SECRET:-ftcmetrics-secret}
+    ports:
+      - "6001:6001"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6001"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redis_data:
+  uploads:

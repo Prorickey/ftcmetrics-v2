@@ -1,0 +1,16 @@
+node_modules
+.next
+dist
+.git
+.env*
+*.md
+.DS_Store
+.vscode
+.idea
+coverage
+.nyc_output
+packages/api/uploads
+packages/web/public/sw.js
+packages/web/public/sw.js.map
+packages/web/public/workbox-*.js
+packages/web/public/workbox-*.js.map

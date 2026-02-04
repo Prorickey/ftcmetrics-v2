@@ -4,14 +4,14 @@ import path from "path";
 // Load .env from workspace root
 config({ path: path.resolve(process.cwd(), "../../.env") });
 
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthResult } from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import Google from "next-auth/providers/google";
 import Discord from "next-auth/providers/discord";
 import GitHub from "next-auth/providers/github";
 import { prisma } from "@ftcmetrics/db";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const nextAuth: NextAuthResult = NextAuth({
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -45,3 +45,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: "database",
   },
 });
+
+export const handlers: NextAuthResult["handlers"] = nextAuth.handlers;
+export const auth: NextAuthResult["auth"] = nextAuth.auth;
+export const signIn: NextAuthResult["signIn"] = nextAuth.signIn;
+export const signOut: NextAuthResult["signOut"] = nextAuth.signOut;

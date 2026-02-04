@@ -1,0 +1,53 @@
+name: Build & Push
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: packages/web/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/ftc8569/ftcmetrics-web:latest
+            ${{ env.REGISTRY }}/ftc8569/ftcmetrics-web:${{ github.sha }}
+
+  build-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: packages/api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/ftc8569/ftcmetrics-api:latest
+            ${{ env.REGISTRY }}/ftc8569/ftcmetrics-api:${{ github.sha }}

@@ -3,6 +3,7 @@ import withPWA from "@ducanh2912/next-pwa";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: "standalone",
   transpilePackages: ["@ftcmetrics/shared"],
   allowedDevOrigins: ["192.168.7.5"],
 };
