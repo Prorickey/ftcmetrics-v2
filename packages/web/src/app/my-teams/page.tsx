@@ -533,12 +533,13 @@ function TeamProfileDisplay({
           <h3 className="font-semibold text-lg mb-4">Recent Events</h3>
           <div className="space-y-3">
             {recentEvents.map((event) => (
-              <div
+              <Link
                 key={event.eventCode}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                href={`/analytics/team/${teamNumber}/event/${event.eventCode}`}
+                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm truncate">
+                  <p className="font-medium text-sm truncate text-ftc-orange">
                     {event.eventName}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -558,7 +559,7 @@ function TeamProfileDisplay({
                     </span>
                   )}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
           {events.length > 5 && (
