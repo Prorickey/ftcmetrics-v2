@@ -1,5 +1,6 @@
 import { config } from "dotenv";
 import path from "path";
+import fs from "fs";
 
 // Load .env from workspace root
 config({ path: path.resolve(process.cwd(), "../../.env") });
@@ -28,10 +29,63 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: (origin) => {
+      const allowed = [
+        "http://localhost:3000",
+        process.env.CORS_ORIGIN,
+      ].filter(Boolean);
+      return allowed.includes(origin) ? origin : allowed[0];
+    },
     credentials: true,
   })
 );
+
+// Static file serving for uploads (before rate limiter)
+const UPLOADS_DIR = path.resolve(__dirname, "../uploads");
+
+const MIME_TYPES: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+};
+
+app.get("/api/uploads/:filename", async (c) => {
+  const filename = c.req.param("filename");
+
+  // Validate filename: no path traversal
+  if (!filename || filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+    return c.json({ error: "Invalid filename" }, 400);
+  }
+
+  const filePath = path.join(UPLOADS_DIR, filename);
+
+  // Ensure resolved path is still within uploads dir
+  if (!path.resolve(filePath).startsWith(path.resolve(UPLOADS_DIR))) {
+    return c.json({ error: "Invalid filename" }, 400);
+  }
+
+  try {
+    await fs.promises.access(filePath);
+  } catch {
+    return c.json({ error: "File not found" }, 404);
+  }
+
+  const ext = path.extname(filename).toLowerCase();
+  const contentType = MIME_TYPES[ext] || "application/octet-stream";
+  const fileBuffer = await fs.promises.readFile(filePath);
+
+  return new Response(fileBuffer, {
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+    },
+  });
+});
 
 // Rate limiting (100 requests per minute per user/IP)
 app.use("/api/*", rateLimit(100, 60000));

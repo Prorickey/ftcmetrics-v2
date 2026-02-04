@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { prisma } from "@ftcmetrics/db";
 import { getFTCApi } from "../lib/ftc-api";
 
 const events = new Hono();
@@ -75,6 +76,35 @@ events.get("/:eventCode/teams", async (c) => {
   try {
     const api = getFTCApi();
     const { teams } = await api.getEventTeams(eventCode);
+
+    // Cache teams in FtcTeam table (fire-and-forget)
+    Promise.all(
+      teams.map((t) =>
+        prisma.ftcTeam
+          .upsert({
+            where: { teamNumber: t.teamNumber },
+            update: {
+              nameShort: t.nameShort,
+              nameFull: t.nameFull,
+              city: t.city || null,
+              stateProv: t.stateProv || null,
+              country: t.country || null,
+              rookieYear: t.rookieYear || null,
+              fetchedAt: new Date(),
+            },
+            create: {
+              teamNumber: t.teamNumber,
+              nameShort: t.nameShort,
+              nameFull: t.nameFull,
+              city: t.city || null,
+              stateProv: t.stateProv || null,
+              country: t.country || null,
+              rookieYear: t.rookieYear || null,
+            },
+          })
+          .catch(() => {})
+      )
+    ).catch(() => {});
 
     return c.json({
       success: true,

@@ -255,7 +255,7 @@ analytics.get("/team/:teamNumber", async (c) => {
       data: {
         teamNumber,
         events: events.map((e) => ({
-          eventCode: e.eventCode,
+          eventCode: e.code,
           name: e.name,
           dateStart: e.dateStart,
         })),
@@ -346,6 +346,190 @@ analytics.post("/predict", async (c) => {
     console.error("Error predicting match:", error);
     return c.json(
       { success: false, error: "Failed to predict match" },
+      500
+    );
+  }
+});
+
+/**
+ * GET /api/analytics/team/:teamNumber/matches
+ * Get match-by-match breakdowns for a team at an event
+ */
+analytics.get("/team/:teamNumber/matches", async (c) => {
+  const teamNumber = parseInt(c.req.param("teamNumber"), 10);
+  const eventCode = c.req.query("eventCode");
+
+  if (isNaN(teamNumber)) {
+    return c.json({ success: false, error: "Invalid team number" }, 400);
+  }
+
+  if (!eventCode) {
+    return c.json({ success: false, error: "eventCode query parameter required" }, 400);
+  }
+
+  try {
+    const api = getFTCApi();
+
+    const [qualMatches, qualScores, playoffMatches, playoffScores] = await Promise.all([
+      api.getMatches(eventCode, "qual"),
+      api.getScores(eventCode, "qual"),
+      api.getMatches(eventCode, "playoff").catch(() => ({ matches: [] })),
+      api.getScores(eventCode, "playoff").catch(() => ({ matchScores: [] })),
+    ]);
+
+    type MatchEntry = {
+      matchNumber: number;
+      matchSeries: number;
+      level: "qual" | "playoff";
+      description: string;
+      alliance: "red" | "blue";
+      partnerTeam: number;
+      opponentTeam1: number;
+      opponentTeam2: number;
+      allianceScore: number;
+      allianceAutoScore: number;
+      allianceTeleopScore: number;
+      allianceEndgameScore: number;
+      opponentScore: number;
+      result: "win" | "loss" | "tie";
+    };
+
+    const matches: MatchEntry[] = [];
+
+    // Build an index of scores by matchNumber+matchSeries for efficient lookup
+    const buildScoreIndex = (scores: typeof qualScores.matchScores) => {
+      const index = new Map<string, (typeof scores)[number]>();
+      for (const s of scores) {
+        index.set(`${s.matchNumber}-${s.matchSeries}`, s);
+      }
+      return index;
+    };
+
+    // For quals, matches and scores are 1:1 by matchNumber (matchSeries=0).
+    // For playoffs, multiple matchSeries share the same matchNumber,
+    // so we pair matches with scores positionally (both ordered by series).
+    const qualScoreIndex = buildScoreIndex(qualScores.matchScores);
+
+    // Process qual matches
+    for (const match of qualMatches.matches) {
+      const teamEntry = match.teams.find((t) => t.teamNumber === teamNumber);
+      if (!teamEntry) continue;
+
+      const matchScoreData = qualScoreIndex.get(`${match.matchNumber}-0`);
+      if (!matchScoreData || matchScoreData.alliances.length < 2) continue;
+
+      const isRed = teamEntry.station.startsWith("Red");
+      const allianceColor = isRed ? "Red" : "Blue";
+      const opponentColor = isRed ? "Blue" : "Red";
+
+      const ally = matchScoreData.alliances.find((a) => a.alliance === allianceColor);
+      const opp = matchScoreData.alliances.find((a) => a.alliance === opponentColor);
+      if (!ally || !opp) continue;
+
+      const allianceTeams = match.teams
+        .filter((t) => t.station.startsWith(allianceColor))
+        .map((t) => t.teamNumber);
+      const opponentTeams = match.teams
+        .filter((t) => t.station.startsWith(opponentColor))
+        .map((t) => t.teamNumber);
+
+      // DECODE season uses teleopPoints and teleopBasePoints (endgame)
+      const teleopScore = Number(ally.dcPoints) || Number((ally as Record<string, unknown>).teleopPoints) || 0;
+      const endgameScore = Number(ally.endgamePoints) || Number((ally as Record<string, unknown>).teleopBasePoints) || 0;
+
+      let result: "win" | "loss" | "tie";
+      if (ally.totalPoints > opp.totalPoints) result = "win";
+      else if (ally.totalPoints < opp.totalPoints) result = "loss";
+      else result = "tie";
+
+      matches.push({
+        matchNumber: match.matchNumber,
+        matchSeries: 0,
+        level: "qual",
+        description: match.description || `Qual ${match.matchNumber}`,
+        alliance: isRed ? "red" : "blue",
+        partnerTeam: allianceTeams.find((t) => t !== teamNumber) ?? 0,
+        opponentTeam1: opponentTeams[0] ?? 0,
+        opponentTeam2: opponentTeams[1] ?? 0,
+        allianceScore: ally.totalPoints,
+        allianceAutoScore: ally.autoPoints,
+        allianceTeleopScore: teleopScore,
+        allianceEndgameScore: endgameScore,
+        opponentScore: opp.totalPoints,
+        result,
+      });
+    }
+
+    // Process playoff matches — pair by index since matchNumber is shared
+    // Both matches and scores arrays are ordered by series
+    for (let i = 0; i < playoffMatches.matches.length; i++) {
+      const match = playoffMatches.matches[i];
+      const teamEntry = match.teams.find((t) => t.teamNumber === teamNumber);
+      if (!teamEntry) continue;
+
+      const matchScoreData = playoffScores.matchScores[i];
+      if (!matchScoreData || matchScoreData.alliances.length < 2) continue;
+
+      const isRed = teamEntry.station.startsWith("Red");
+      const allianceColor = isRed ? "Red" : "Blue";
+      const opponentColor = isRed ? "Blue" : "Red";
+
+      const ally = matchScoreData.alliances.find((a) => a.alliance === allianceColor);
+      const opp = matchScoreData.alliances.find((a) => a.alliance === opponentColor);
+      if (!ally || !opp) continue;
+
+      const allianceTeams = match.teams
+        .filter((t) => t.station.startsWith(allianceColor))
+        .map((t) => t.teamNumber);
+      const opponentTeams = match.teams
+        .filter((t) => t.station.startsWith(opponentColor))
+        .map((t) => t.teamNumber);
+
+      const teleopScore = Number(ally.dcPoints) || Number((ally as Record<string, unknown>).teleopPoints) || 0;
+      const endgameScore = Number(ally.endgamePoints) || Number((ally as Record<string, unknown>).teleopBasePoints) || 0;
+
+      let result: "win" | "loss" | "tie";
+      if (ally.totalPoints > opp.totalPoints) result = "win";
+      else if (ally.totalPoints < opp.totalPoints) result = "loss";
+      else result = "tie";
+
+      matches.push({
+        matchNumber: match.matchNumber,
+        matchSeries: matchScoreData.matchSeries,
+        level: "playoff",
+        description: match.description || `Playoff ${matchScoreData.matchSeries}`,
+        alliance: isRed ? "red" : "blue",
+        partnerTeam: allianceTeams.find((t) => t !== teamNumber) ?? 0,
+        opponentTeam1: opponentTeams[0] ?? 0,
+        opponentTeam2: opponentTeams[1] ?? 0,
+        allianceScore: ally.totalPoints,
+        allianceAutoScore: ally.autoPoints,
+        allianceTeleopScore: teleopScore,
+        allianceEndgameScore: endgameScore,
+        opponentScore: opp.totalPoints,
+        result,
+      });
+    }
+
+    // Quals by matchNumber, then playoffs by matchSeries
+    matches.sort((a, b) => {
+      if (a.level !== b.level) return a.level === "qual" ? -1 : 1;
+      if (a.level === "qual") return a.matchNumber - b.matchNumber;
+      return a.matchSeries - b.matchSeries;
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        teamNumber,
+        eventCode,
+        matches,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching team matches:", error);
+    return c.json(
+      { success: false, error: "Failed to fetch team matches" },
       500
     );
   }

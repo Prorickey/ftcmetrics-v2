@@ -1,6 +1,26 @@
 import { Hono } from "hono";
 import { prisma } from "@ftcmetrics/db";
 import { getFTCApi } from "../lib/ftc-api";
+import { randomUUID } from "crypto";
+import path from "path";
+import fs from "fs";
+
+const UPLOADS_DIR = path.resolve(__dirname, "../uploads");
+
+const ALLOWED_PHOTO_MIMES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ALLOWED_VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"];
+const PHOTO_MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const VIDEO_MAX_SIZE = 50 * 1024 * 1024; // 50MB
+
+const MIME_TO_EXT: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+  "video/mp4": ".mp4",
+  "video/webm": ".webm",
+  "video/quicktime": ".mov",
+};
 
 const userTeams = new Hono();
 
@@ -167,6 +187,9 @@ userTeams.get("/:teamId", async (c) => {
             expiresAt: { gt: new Date() },
           },
         },
+        media: {
+          orderBy: { sortOrder: "asc" },
+        },
       },
     });
 
@@ -220,12 +243,39 @@ userTeams.patch("/:teamId", async (c) => {
     }
 
     const body = await c.req.json();
-    const { name, sharingLevel } = body;
+    const { name, sharingLevel, bio, robotName, robotDesc, drivetrainType, links } = body;
 
     const updateData: Record<string, unknown> = {};
     if (name) updateData.name = name;
     if (sharingLevel && ["PRIVATE", "EVENT", "PUBLIC"].includes(sharingLevel)) {
       updateData.sharingLevel = sharingLevel;
+    }
+    if (bio !== undefined) updateData.bio = bio || null;
+    if (robotName !== undefined) updateData.robotName = robotName || null;
+    if (robotDesc !== undefined) updateData.robotDesc = robotDesc || null;
+    if (drivetrainType !== undefined) {
+      if (drivetrainType && ["mecanum", "tank", "swerve", "other"].includes(drivetrainType)) {
+        updateData.drivetrainType = drivetrainType;
+      } else {
+        updateData.drivetrainType = null;
+      }
+    }
+    if (links !== undefined) {
+      if (links === null) {
+        updateData.links = null;
+      } else if (Array.isArray(links)) {
+        const valid = links.every(
+          (l: unknown) =>
+            typeof l === "object" &&
+            l !== null &&
+            typeof (l as Record<string, unknown>).title === "string" &&
+            typeof (l as Record<string, unknown>).url === "string"
+        );
+        if (!valid) {
+          return c.json({ success: false, error: "Links must be an array of {title, url} objects" }, 400);
+        }
+        updateData.links = links;
+      }
     }
 
     const team = await prisma.team.update({
@@ -529,6 +579,257 @@ userTeams.patch("/:teamId/members/:memberId", async (c) => {
   } catch (error) {
     console.error("Error updating member:", error);
     return c.json({ success: false, error: "Failed to update member" }, 500);
+  }
+});
+
+/**
+ * POST /api/user-teams/:teamId/media
+ * Add a media item (MENTOR/LEADER only)
+ * Supports multipart/form-data for file uploads (PHOTO/VIDEO) and JSON for URL-based media
+ */
+userTeams.post("/:teamId/media", async (c) => {
+  const userId = c.req.header("X-User-Id");
+  const teamId = c.req.param("teamId");
+
+  if (!userId) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
+
+  try {
+    const membership = await prisma.teamMember.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+    });
+
+    if (!membership) {
+      return c.json({ success: false, error: "Not a team member" }, 403);
+    }
+
+    if (membership.role !== "MENTOR" && membership.role !== "LEADER") {
+      return c.json({ success: false, error: "Insufficient permissions" }, 403);
+    }
+
+    const contentType = c.req.header("Content-Type") || "";
+    const isMultipart = contentType.includes("multipart/form-data");
+
+    if (isMultipart) {
+      // File upload flow
+      const formData = await c.req.parseBody();
+      const type = formData["type"] as string;
+      const title = formData["title"] as string;
+      const description = (formData["description"] as string) || null;
+      const file = formData["file"] as File;
+
+      if (!type || !["PHOTO", "VIDEO"].includes(type)) {
+        return c.json({ success: false, error: "File uploads only allowed for PHOTO or VIDEO" }, 400);
+      }
+      if (!title) {
+        return c.json({ success: false, error: "Title is required" }, 400);
+      }
+      if (!file || !(file instanceof File)) {
+        return c.json({ success: false, error: "File is required" }, 400);
+      }
+
+      const mimeType = file.type;
+      const fileSize = file.size;
+
+      // Validate MIME type
+      if (type === "PHOTO" && !ALLOWED_PHOTO_MIMES.includes(mimeType)) {
+        return c.json({ success: false, error: "Invalid photo type. Allowed: JPEG, PNG, WebP, GIF" }, 400);
+      }
+      if (type === "VIDEO" && !ALLOWED_VIDEO_MIMES.includes(mimeType)) {
+        return c.json({ success: false, error: "Invalid video type. Allowed: MP4, WebM, QuickTime" }, 400);
+      }
+
+      // Validate file size
+      const maxSize = type === "PHOTO" ? PHOTO_MAX_SIZE : VIDEO_MAX_SIZE;
+      if (fileSize > maxSize) {
+        const maxMB = maxSize / (1024 * 1024);
+        return c.json({ success: false, error: `File too large. Maximum ${maxMB}MB for ${type.toLowerCase()}s` }, 400);
+      }
+
+      // Save file to disk
+      const ext = MIME_TO_EXT[mimeType] || "";
+      const filename = `${randomUUID()}${ext}`;
+      await fs.promises.mkdir(UPLOADS_DIR, { recursive: true });
+      const filePath = path.join(UPLOADS_DIR, filename);
+      const buffer = Buffer.from(await file.arrayBuffer());
+      await fs.promises.writeFile(filePath, buffer);
+
+      const url = `/api/uploads/${filename}`;
+
+      const maxSort = await prisma.teamMedia.aggregate({
+        where: { teamId, type: type as "PHOTO" | "VIDEO" },
+        _max: { sortOrder: true },
+      });
+
+      const media = await prisma.teamMedia.create({
+        data: {
+          teamId,
+          type: type as "PHOTO" | "VIDEO",
+          title,
+          url,
+          description,
+          fileSize,
+          mimeType,
+          isUpload: true,
+          sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
+        },
+      });
+
+      return c.json({ success: true, data: media });
+    } else {
+      // JSON URL-based flow
+      const body = await c.req.json();
+      const { type, title, url, description } = body;
+
+      if (type === "LINK") {
+        return c.json({
+          success: false,
+          error: "LINK type is no longer accepted for new media. Use team profile links instead (PATCH /:teamId with links field).",
+        }, 400);
+      }
+
+      if (!type || !["CAD", "VIDEO", "PHOTO"].includes(type)) {
+        return c.json({ success: false, error: "Invalid media type" }, 400);
+      }
+      if (!title || !url) {
+        return c.json({ success: false, error: "Title and URL are required" }, 400);
+      }
+
+      const maxSort = await prisma.teamMedia.aggregate({
+        where: { teamId, type },
+        _max: { sortOrder: true },
+      });
+
+      const media = await prisma.teamMedia.create({
+        data: {
+          teamId,
+          type,
+          title,
+          url,
+          description: description || null,
+          sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
+        },
+      });
+
+      return c.json({ success: true, data: media });
+    }
+  } catch (error) {
+    console.error("Error creating media:", error);
+    return c.json({ success: false, error: "Failed to create media" }, 500);
+  }
+});
+
+/**
+ * PATCH /api/user-teams/:teamId/media/:mediaId
+ * Update a media item (MENTOR/LEADER only)
+ */
+userTeams.patch("/:teamId/media/:mediaId", async (c) => {
+  const userId = c.req.header("X-User-Id");
+  const teamId = c.req.param("teamId");
+  const mediaId = c.req.param("mediaId");
+
+  if (!userId) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
+
+  try {
+    const membership = await prisma.teamMember.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+    });
+
+    if (!membership) {
+      return c.json({ success: false, error: "Not a team member" }, 403);
+    }
+
+    if (membership.role !== "MENTOR" && membership.role !== "LEADER") {
+      return c.json({ success: false, error: "Insufficient permissions" }, 403);
+    }
+
+    const existing = await prisma.teamMedia.findUnique({
+      where: { id: mediaId },
+    });
+
+    if (!existing || existing.teamId !== teamId) {
+      return c.json({ success: false, error: "Media not found" }, 404);
+    }
+
+    const body = await c.req.json();
+    const { title, url, description, sortOrder } = body;
+
+    const updateData: Record<string, unknown> = {};
+    if (title !== undefined) updateData.title = title;
+    if (url !== undefined) updateData.url = url;
+    if (description !== undefined) updateData.description = description || null;
+    if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
+
+    const media = await prisma.teamMedia.update({
+      where: { id: mediaId },
+      data: updateData,
+    });
+
+    return c.json({ success: true, data: media });
+  } catch (error) {
+    console.error("Error updating media:", error);
+    return c.json({ success: false, error: "Failed to update media" }, 500);
+  }
+});
+
+/**
+ * DELETE /api/user-teams/:teamId/media/:mediaId
+ * Delete a media item (MENTOR/LEADER only)
+ */
+userTeams.delete("/:teamId/media/:mediaId", async (c) => {
+  const userId = c.req.header("X-User-Id");
+  const teamId = c.req.param("teamId");
+  const mediaId = c.req.param("mediaId");
+
+  if (!userId) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
+
+  try {
+    const membership = await prisma.teamMember.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+    });
+
+    if (!membership) {
+      return c.json({ success: false, error: "Not a team member" }, 403);
+    }
+
+    if (membership.role !== "MENTOR" && membership.role !== "LEADER") {
+      return c.json({ success: false, error: "Insufficient permissions" }, 403);
+    }
+
+    const existing = await prisma.teamMedia.findUnique({
+      where: { id: mediaId },
+    });
+
+    if (!existing || existing.teamId !== teamId) {
+      return c.json({ success: false, error: "Media not found" }, 404);
+    }
+
+    // Delete file from disk if it was an upload
+    if (existing.isUpload) {
+      const filename = existing.url.replace("/api/uploads/", "");
+      if (filename && !filename.includes("..") && !filename.includes("/")) {
+        const filePath = path.join(UPLOADS_DIR, filename);
+        try {
+          await fs.promises.unlink(filePath);
+        } catch {
+          // File may already be deleted; continue
+        }
+      }
+    }
+
+    await prisma.teamMedia.delete({
+      where: { id: mediaId },
+    });
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting media:", error);
+    return c.json({ success: false, error: "Failed to delete media" }, 500);
   }
 });
 

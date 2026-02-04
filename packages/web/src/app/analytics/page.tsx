@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, Suspense } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -21,14 +21,12 @@ interface Event {
   dateEnd: string;
 }
 
-interface TeamData {
+interface TeamSearchResult {
   teamNumber: number;
-  nameFull: string;
   nameShort: string;
-  city: string;
-  stateProv: string;
-  country: string;
-  rookieYear: number;
+  nameFull: string;
+  city: string | null;
+  stateProv: string | null;
 }
 
 function AnalyticsContent() {
@@ -46,9 +44,11 @@ function AnalyticsContent() {
 
   // Team search state
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
-  const [teamData, setTeamData] = useState<TeamData | null>(null);
-  const [teamLoading, setTeamLoading] = useState(false);
-  const [teamError, setTeamError] = useState<string | null>(null);
+  const [teamSearchResults, setTeamSearchResults] = useState<TeamSearchResult[]>([]);
+  const [teamSearchLoading, setTeamSearchLoading] = useState(false);
+  const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const teamSearchRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,6 +81,51 @@ function AnalyticsContent() {
     }
     fetchEvents();
   }, []);
+
+  // Close team dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        teamSearchRef.current &&
+        !teamSearchRef.current.contains(e.target as Node)
+      ) {
+        setShowTeamDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Debounced team search
+  const handleTeamSearchInput = useCallback(
+    (value: string) => {
+      setTeamSearchQuery(value);
+
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+
+      if (!value.trim()) {
+        setTeamSearchResults([]);
+        setShowTeamDropdown(false);
+        return;
+      }
+
+      debounceRef.current = setTimeout(async () => {
+        setTeamSearchLoading(true);
+        try {
+          const result = await ftcTeamsApi.search(value.trim());
+          if (result.success && result.data) {
+            setTeamSearchResults(result.data);
+            setShowTeamDropdown(true);
+          }
+        } catch {
+          setTeamSearchResults([]);
+        } finally {
+          setTeamSearchLoading(false);
+        }
+      }, 300);
+    },
+    []
+  );
 
   // Get unique countries for filter
   const countries = useMemo(() => {
@@ -158,31 +203,6 @@ function AnalyticsContent() {
 
   const handleEventSelect = (eventCode: string) => {
     setSelectedEventCode(eventCode);
-  };
-
-  const handleTeamSearch = async () => {
-    const teamNumber = parseInt(teamSearchQuery, 10);
-    if (!teamNumber || teamNumber <= 0) {
-      setTeamError("Please enter a valid team number");
-      return;
-    }
-
-    setTeamLoading(true);
-    setTeamError(null);
-    setTeamData(null);
-
-    try {
-      const result = await ftcTeamsApi.getTeam(teamNumber);
-      if (result.success && result.data) {
-        setTeamData(result.data);
-      } else {
-        setTeamError(`Team ${teamNumber} not found`);
-      }
-    } catch {
-      setTeamError("Failed to look up team. Please try again.");
-    } finally {
-      setTeamLoading(false);
-    }
   };
 
   const selectedEvent = events.find((e) => e.code === selectedEventCode);
@@ -352,98 +372,82 @@ function AnalyticsContent() {
 
         {/* Team Search Mode */}
         {searchMode === "team" && (
-          <>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleTeamSearch();
-              }}
-              className="flex gap-3"
-            >
-              <div className="relative flex-1">
-                <svg
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-                <input
-                  type="number"
-                  placeholder="Enter team number..."
-                  value={teamSearchQuery}
-                  onChange={(e) => setTeamSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={teamLoading || !teamSearchQuery}
-                className="px-5 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          <div ref={teamSearchRef} className="relative">
+            <div className="relative">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                {teamLoading ? (
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                ) : (
-                  "Search"
-                )}
-              </button>
-            </form>
-
-            {/* Team Error */}
-            {teamError && (
-              <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-sm text-red-600 dark:text-red-400">{teamError}</p>
-              </div>
-            )}
-
-            {/* Team Result */}
-            {teamData && (
-              <div className="mt-3 p-4 bg-ftc-orange/10 rounded-lg">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-bold text-ftc-orange text-lg">
-                      Team {teamData.teamNumber}
-                    </p>
-                    <p className="font-medium mt-0.5">
-                      {teamData.nameShort || teamData.nameFull}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      {teamData.city}, {teamData.stateProv}, {teamData.country}
-                    </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                      Rookie Year: {teamData.rookieYear}
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Link
-                      href={`/analytics/team/${teamData.teamNumber}`}
-                      className="px-4 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity text-sm"
-                    >
-                      View Team Analytics
-                    </Link>
-                    <button
-                      onClick={() => {
-                        setTeamData(null);
-                        setTeamSearchQuery("");
-                        setTeamError(null);
-                      }}
-                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 mt-1"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search by team number or name..."
+                value={teamSearchQuery}
+                onChange={(e) => handleTeamSearchInput(e.target.value)}
+                onFocus={() => {
+                  if (teamSearchResults.length > 0) setShowTeamDropdown(true);
+                }}
+                className="w-full pl-10 pr-10 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange"
+              />
+              {teamSearchLoading && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-ftc-orange border-t-transparent" />
                 </div>
+              )}
+            </div>
+
+            {/* Dropdown results */}
+            {showTeamDropdown && teamSearchResults.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                {teamSearchResults.map((team) => (
+                  <button
+                    key={team.teamNumber}
+                    onClick={() => {
+                      setShowTeamDropdown(false);
+                      router.push(`/analytics/team/${team.teamNumber}`);
+                    }}
+                    className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-ftc-orange text-lg min-w-[4rem]">
+                        {team.teamNumber}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">
+                          {team.nameShort || team.nameFull}
+                        </p>
+                        {(team.city || team.stateProv) && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                            {[team.city, team.stateProv]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
-          </>
+
+            {/* No results message */}
+            {showTeamDropdown &&
+              teamSearchResults.length === 0 &&
+              !teamSearchLoading &&
+              teamSearchQuery.trim().length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No teams found. Try browsing an event first to populate the search index.
+                </div>
+              )}
+          </div>
         )}
       </div>
 

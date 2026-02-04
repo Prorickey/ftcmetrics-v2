@@ -15,13 +15,13 @@ interface FTCApiConfig {
 
 // API Response Types
 export interface FTCEvent {
-  eventCode: string;
+  code: string;
   name: string;
   districtCode: string | null;
   venue: string;
   address: string;
   city: string;
-  stateProv: string;
+  stateprov: string;
   country: string;
   dateStart: string;
   dateEnd: string;

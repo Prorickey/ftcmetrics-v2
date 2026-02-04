@@ -64,6 +64,9 @@ venv/
 *.temp
 .cache/
 
+# Uploads
+packages/api/uploads/
+
 # PWA files
 packages/web/public/sw.js
 packages/web/public/sw.js.map

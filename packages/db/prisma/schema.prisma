@@ -71,16 +71,22 @@ model Session {
 // ============================================================================
 
 model Team {
-  id           String       @id @default(cuid())
-  teamNumber   Int          @unique @map("team_number")
-  name         String
-  sharingLevel SharingLevel @default(PRIVATE) @map("sharing_level")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
+  id             String       @id @default(cuid())
+  teamNumber     Int          @unique @map("team_number")
+  name           String
+  sharingLevel   SharingLevel @default(PRIVATE) @map("sharing_level")
+  bio            String?      @db.Text
+  robotName      String?      @map("robot_name")
+  robotDesc      String?      @map("robot_desc") @db.Text
+  drivetrainType String?      @map("drivetrain_type")
+  links          Json?        // Array<{title: string, url: string}>
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
 
   // Relations
   members         TeamMember[]
   invites         TeamInvite[]
+  media           TeamMedia[]
   scoutingEntries ScoutingEntry[] @relation("ScoutingTeam")
   scoutedEntries  ScoutingEntry[] @relation("ScoutedTeam")
   scoutingNotes   ScoutingNote[]  @relation("NotingTeam")
@@ -132,6 +138,33 @@ model TeamInvite {
   creator User @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@map("team_invites")
+}
+
+model TeamMedia {
+  id          String    @id @default(cuid())
+  teamId      String    @map("team_id")
+  type        MediaType
+  title       String
+  url         String
+  description String?   @db.Text
+  fileSize    Int?      @map("file_size")
+  mimeType    String?   @map("mime_type")
+  isUpload    Boolean   @default(false) @map("is_upload")
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, type])
+  @@map("team_media")
+}
+
+enum MediaType {
+  CAD
+  VIDEO
+  PHOTO
+  LINK
 }
 
 // ============================================================================
@@ -307,6 +340,50 @@ model ScoutingNote {
   @@index([eventCode])
   @@index([createdAt])
   @@map("scouting_notes")
+}
+
+// ============================================================================
+// FTC TEAM CACHE (populated from FTC Events API)
+// ============================================================================
+
+model FtcTeam {
+  id          String   @id @default(cuid())
+  teamNumber  Int      @unique @map("team_number")
+  nameShort   String   @map("name_short")
+  nameFull    String   @map("name_full")
+  city        String?
+  stateProv   String?  @map("state_prov")
+  country     String?
+  rookieYear  Int?     @map("rookie_year")
+  fetchedAt   DateTime @default(now()) @map("fetched_at")
+
+  events FtcTeamEvent[]
+
+  @@index([nameShort])
+  @@index([nameFull])
+  @@map("ftc_teams")
+}
+
+model FtcTeamEvent {
+  id          String   @id @default(cuid())
+  teamNumber  Int      @map("team_number")
+  eventCode   String   @map("event_code")
+  eventName   String   @map("event_name")
+  city        String?
+  stateProv   String?  @map("state_prov")
+  dateStart   DateTime @map("date_start")
+  rank        Int?
+  wins        Int?
+  losses      Int?
+  ties        Int?
+  qualAverage Float?   @map("qual_average")
+  fetchedAt   DateTime @default(now()) @map("fetched_at")
+
+  team FtcTeam @relation(fields: [teamNumber], references: [teamNumber], onDelete: Cascade)
+
+  @@unique([teamNumber, eventCode])
+  @@index([eventCode])
+  @@map("ftc_team_events")
 }
 
 // ============================================================================

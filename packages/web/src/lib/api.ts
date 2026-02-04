@@ -64,6 +64,11 @@ export const teamsApi = {
       teamNumber: number;
       name: string;
       sharingLevel: string;
+      bio: string | null;
+      robotName: string | null;
+      robotDesc: string | null;
+      drivetrainType: string | null;
+      links: Array<{ title: string; url: string }> | null;
       members: Array<{
         id: string;
         userId: string;
@@ -82,6 +87,17 @@ export const teamsApi = {
         maxUses: number | null;
         uses: number;
       }>;
+      media: Array<{
+        id: string;
+        type: "CAD" | "VIDEO" | "PHOTO" | "LINK";
+        title: string;
+        url: string;
+        description: string | null;
+        sortOrder: number;
+        isUpload: boolean;
+        fileSize: number | null;
+        mimeType: string | null;
+      }>;
     }>(`/api/user-teams/${teamId}`, {
       headers: { "X-User-Id": userId },
     });
@@ -90,7 +106,15 @@ export const teamsApi = {
   updateTeam: async (
     userId: string,
     teamId: string,
-    data: { name?: string; sharingLevel?: string }
+    data: {
+      name?: string;
+      sharingLevel?: string;
+      bio?: string;
+      robotName?: string;
+      robotDesc?: string;
+      drivetrainType?: string;
+      links?: Array<{ title: string; url: string }> | null;
+    }
   ) => {
     return fetchApi(`/api/user-teams/${teamId}`, {
       method: "PATCH",
@@ -149,6 +173,79 @@ export const teamsApi = {
   leaveTeam: async (userId: string, teamId: string) => {
     return fetchApi(`/api/user-teams/${teamId}/leave`, {
       method: "POST",
+      headers: { "X-User-Id": userId },
+    });
+  },
+
+  addMedia: async (
+    userId: string,
+    teamId: string,
+    data: { type: "CAD" | "VIDEO" | "PHOTO"; title: string; url: string; description?: string }
+  ) => {
+    return fetchApi<{
+      id: string;
+      type: "CAD" | "VIDEO" | "PHOTO";
+      title: string;
+      url: string;
+      description: string | null;
+      sortOrder: number;
+      isUpload: boolean;
+      fileSize: number | null;
+      mimeType: string | null;
+    }>(`/api/user-teams/${teamId}/media`, {
+      method: "POST",
+      headers: { "X-User-Id": userId },
+      body: JSON.stringify(data),
+    });
+  },
+
+  uploadMedia: async (
+    userId: string,
+    teamId: string,
+    data: { type: "PHOTO" | "VIDEO"; title: string; description?: string; file: File }
+  ) => {
+    const formData = new FormData();
+    formData.append("type", data.type);
+    formData.append("title", data.title);
+    if (data.description) formData.append("description", data.description);
+    formData.append("file", data.file);
+
+    const url = `${API_URL}/api/user-teams/${teamId}/media`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "X-User-Id": userId },
+      body: formData,
+      credentials: "include",
+    });
+    return response.json() as Promise<ApiResponse<{
+      id: string;
+      type: "PHOTO" | "VIDEO";
+      title: string;
+      url: string;
+      description: string | null;
+      sortOrder: number;
+      isUpload: boolean;
+      fileSize: number | null;
+      mimeType: string | null;
+    }>>;
+  },
+
+  updateMedia: async (
+    userId: string,
+    teamId: string,
+    mediaId: string,
+    data: { title?: string; url?: string; description?: string; sortOrder?: number }
+  ) => {
+    return fetchApi(`/api/user-teams/${teamId}/media/${mediaId}`, {
+      method: "PATCH",
+      headers: { "X-User-Id": userId },
+      body: JSON.stringify(data),
+    });
+  },
+
+  removeMedia: async (userId: string, teamId: string, mediaId: string) => {
+    return fetchApi(`/api/user-teams/${teamId}/media/${mediaId}`, {
+      method: "DELETE",
       headers: { "X-User-Id": userId },
     });
   },
@@ -355,6 +452,58 @@ export const ftcTeamsApi = {
   getTeamEvents: async (teamNumber: number) => {
     return fetchApi(`/api/teams/${teamNumber}/events`);
   },
+
+  search: async (query: string) => {
+    return fetchApi<
+      Array<{
+        teamNumber: number;
+        nameShort: string;
+        nameFull: string;
+        city: string | null;
+        stateProv: string | null;
+      }>
+    >(`/api/teams/search?q=${encodeURIComponent(query)}`);
+  },
+
+  getTeamProfile: async (teamNumber: number, userId?: string) => {
+    return fetchApi<{
+      bio: string | null;
+      robotName: string | null;
+      robotDesc: string | null;
+      drivetrainType: string | null;
+      links: Array<{ title: string; url: string }> | null;
+      media: Array<{
+        id: string;
+        type: "CAD" | "VIDEO" | "PHOTO" | "LINK";
+        title: string;
+        url: string;
+        description: string | null;
+        sortOrder: number;
+        isUpload: boolean;
+        fileSize: number | null;
+        mimeType: string | null;
+      }>;
+    } | null>(`/api/teams/${teamNumber}/profile`, {
+      headers: userId ? { "X-User-Id": userId } : {},
+    });
+  },
+
+  getTeamEventSummaries: async (teamNumber: number) => {
+    return fetchApi<
+      Array<{
+        eventCode: string;
+        eventName: string;
+        city: string | null;
+        stateProv: string | null;
+        dateStart: string;
+        rank: number | null;
+        wins: number | null;
+        losses: number | null;
+        ties: number | null;
+        qualAverage: number | null;
+      }>
+    >(`/api/teams/${teamNumber}/event-summaries`);
+  },
 };
 
 // Analytics API
@@ -377,6 +526,23 @@ export interface EPAResult {
   matchCount: number;
   recentEpa?: number;
   trend?: "up" | "down" | "stable";
+}
+
+export interface TeamMatchBreakdown {
+  matchNumber: number;
+  matchSeries: number;
+  level: "qual" | "playoff";
+  description: string;
+  alliance: "red" | "blue";
+  partnerTeam: number;
+  opponentTeam1: number;
+  opponentTeam2: number;
+  allianceScore: number;
+  allianceAutoScore: number;
+  allianceTeleopScore: number;
+  allianceEndgameScore: number;
+  opponentScore: number;
+  result: "win" | "loss" | "tie";
 }
 
 export const analyticsApi = {
@@ -428,6 +594,14 @@ export const analyticsApi = {
       method: "POST",
       body: JSON.stringify(data),
     });
+  },
+
+  getTeamMatches: async (teamNumber: number, eventCode: string) => {
+    return fetchApi<{
+      teamNumber: number;
+      eventCode: string;
+      matches: TeamMatchBreakdown[];
+    }>(`/api/analytics/team/${teamNumber}/matches?eventCode=${encodeURIComponent(eventCode)}`);
   },
 
   compareTeams: async (eventCode: string, teams: number[]) => {
