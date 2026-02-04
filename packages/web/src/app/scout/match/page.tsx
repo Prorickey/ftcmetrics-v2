@@ -20,7 +20,7 @@ interface EventTeam {
 
 interface ScoutingData {
   scoutedTeamNumber: number;
-  matchNumber: number;
+  matchNumber: number | "";
   alliance: "RED" | "BLUE";
   // AUTO
   autoLeave: boolean;
@@ -35,6 +35,8 @@ interface ScoutingData {
   teleopMotifCount: number;
   // ENDGAME
   endgameBaseStatus: "NONE" | "PARTIAL" | "FULL";
+  // NOTES
+  allianceNotes: string;
 }
 
 const initialData: ScoutingData = {
@@ -51,6 +53,7 @@ const initialData: ScoutingData = {
   teleopPatternCount: 0,
   teleopMotifCount: 0,
   endgameBaseStatus: "NONE",
+  allianceNotes: "",
 };
 
 function ScoutMatchContent() {
@@ -60,8 +63,13 @@ function ScoutMatchContent() {
   const teamId = searchParams.get("team") || "";
   const eventCode = searchParams.get("event") || "";
 
+  const preselectedScoutedTeam = searchParams.get("scoutedTeam");
+
   const [eventTeams, setEventTeams] = useState<EventTeam[]>([]);
-  const [data, setData] = useState<ScoutingData>(initialData);
+  const [data, setData] = useState<ScoutingData>({
+    ...initialData,
+    scoutedTeamNumber: preselectedScoutedTeam ? parseInt(preselectedScoutedTeam, 10) : 0,
+  });
   const [loading, setLoading] = useState(false);
   const [teamsLoading, setTeamsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -181,6 +189,11 @@ function ScoutMatchContent() {
       return;
     }
 
+    if (!data.matchNumber) {
+      setError("Please enter a match number");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -188,6 +201,7 @@ function ScoutMatchContent() {
       scoutingTeamId: teamId,
       eventCode,
       ...data,
+      matchNumber: data.matchNumber as number,
     };
 
     try {
@@ -403,7 +417,7 @@ function ScoutMatchContent() {
                 onChange={(e) =>
                   setData((prev) => ({
                     ...prev,
-                    matchNumber: parseInt(e.target.value, 10) || 1,
+                    matchNumber: e.target.value === "" ? "" : parseInt(e.target.value, 10),
                   }))
                 }
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
@@ -580,6 +594,20 @@ function ScoutMatchContent() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Alliance Notes */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
+          <h2 className="font-semibold text-lg mb-4">Alliance Notes</h2>
+          <textarea
+            value={data.allianceNotes}
+            onChange={(e) =>
+              setData((prev) => ({ ...prev, allianceNotes: e.target.value }))
+            }
+            placeholder="General observations about the alliance..."
+            rows={3}
+            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg resize-none"
+          />
         </div>
 
         {/* Total Score Display */}

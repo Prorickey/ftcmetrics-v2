@@ -271,6 +271,7 @@ export const scoutingApi = {
       teleopPatternCount?: number;
       teleopMotifCount?: number;
       endgameBaseStatus?: "NONE" | "PARTIAL" | "FULL";
+      allianceNotes?: string;
     }
   ) => {
     return fetchApi("/api/scouting/entries", {
@@ -310,6 +311,7 @@ export const scoutingApi = {
       teleopPatternCount: number;
       teleopMotifCount: number;
       endgameBaseStatus: "NONE" | "PARTIAL" | "FULL";
+      allianceNotes: string;
     }>
   ) => {
     return fetchApi(`/api/scouting/entries/${entryId}`, {
@@ -389,6 +391,22 @@ export const scoutingApi = {
     return fetchApi(`/api/scouting/entries/${entryId}/deduct-partner`, {
       method: "POST",
       headers: { "X-User-Id": userId },
+    });
+  },
+
+  retryDeductions: async (
+    userId: string,
+    data: { eventCode: string; scoutingTeamId: string }
+  ) => {
+    return fetchApi<{
+      deducted: number;
+      skipped: number;
+      failed: number;
+      total: number;
+    }>("/api/scouting/retry-deductions", {
+      method: "POST",
+      headers: { "X-User-Id": userId },
+      body: JSON.stringify(data),
     });
   },
 };

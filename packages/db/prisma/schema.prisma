@@ -265,6 +265,11 @@ model ScoutingEntry {
   endgameBaseStatus     EndgameBase @default(NONE) @map("endgame_base_status")  // NONE, PARTIAL (5), FULL (10)
 
   // ==================
+  // NOTES
+  // ==================
+  allianceNotes         String? @map("alliance_notes")
+
+  // ==================
   // COMPUTED SCORES
   // ==================
   autoScore     Int @default(0) @map("auto_score")
