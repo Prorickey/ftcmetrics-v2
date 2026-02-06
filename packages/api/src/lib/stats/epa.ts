@@ -32,6 +32,7 @@ const K_FACTOR = 0.2;
 
 export interface MatchForEPA {
   matchNumber: number;
+  timestamp?: number; // Unix timestamp for cross-event ordering
   redTeam1: number;
   redTeam2: number;
   blueTeam1: number;
@@ -134,10 +135,11 @@ function getAdaptiveKFactor(matchCount: number): number {
  * Calculate EPA for all teams from chronologically ordered match results
  */
 export function calculateEPA(matches: MatchForEPA[]): Map<number, EPAResult> {
-  // Sort matches by match number to ensure chronological order
-  const sortedMatches = [...matches].sort(
-    (a, b) => a.matchNumber - b.matchNumber
-  );
+  // Sort matches chronologically: by timestamp when available, falling back to matchNumber
+  const sortedMatches = [...matches].sort((a, b) => {
+    if (a.timestamp && b.timestamp) return a.timestamp - b.timestamp;
+    return a.matchNumber - b.matchNumber;
+  });
 
   // Calculate dynamic baselines from actual match data
   const baselines = calculateBaselines(sortedMatches);

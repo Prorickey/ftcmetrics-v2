@@ -10,6 +10,7 @@ import {
   getEPARankings,
   predictMatch,
   type MatchForEPA,
+  type EPAResult,
 } from "../lib/stats/epa";
 
 const analytics = new Hono();
@@ -56,6 +57,12 @@ function transformMatches(
 
     if (redTeams.length < 2 || blueTeams.length < 2) continue;
 
+    // DECODE 2025-2026 uses teleopPoints/teleopBasePoints instead of dcPoints/endgamePoints
+    const redTeleop = redAlliance.dcPoints ?? (redAlliance as Record<string, unknown>).teleopPoints as number ?? 0;
+    const redEndgame = redAlliance.endgamePoints ?? (redAlliance as Record<string, unknown>).teleopBasePoints as number ?? 0;
+    const blueTeleop = blueAlliance.dcPoints ?? (blueAlliance as Record<string, unknown>).teleopPoints as number ?? 0;
+    const blueEndgame = blueAlliance.endgamePoints ?? (blueAlliance as Record<string, unknown>).teleopBasePoints as number ?? 0;
+
     results.push({
       redTeam1: redTeams[0],
       redTeam2: redTeams[1],
@@ -64,11 +71,11 @@ function transformMatches(
       redScore: redAlliance.totalPoints,
       blueScore: blueAlliance.totalPoints,
       redAutoScore: redAlliance.autoPoints,
-      redTeleopScore: redAlliance.dcPoints,
-      redEndgameScore: redAlliance.endgamePoints,
+      redTeleopScore: redTeleop,
+      redEndgameScore: redEndgame,
       blueAutoScore: blueAlliance.autoPoints,
-      blueTeleopScore: blueAlliance.dcPoints,
-      blueEndgameScore: blueAlliance.endgamePoints,
+      blueTeleopScore: blueTeleop,
+      blueEndgameScore: blueEndgame,
     });
   }
 
@@ -271,6 +278,131 @@ analytics.get("/team/:teamNumber", async (c) => {
 });
 
 /**
+ * Helper: Compute EPA results from an event's match data.
+ * Returns null if the event has no scored matches.
+ */
+async function getEventEPAResults(
+  api: ReturnType<typeof getFTCApi>,
+  eventCode: string
+): Promise<{ epaResults: Map<number, EPAResult>; epaMatches: MatchForEPA[] } | null> {
+  const [matchesResult, scoresResult] = await Promise.all([
+    api.getMatches(eventCode, "qual"),
+    api.getScores(eventCode, "qual"),
+  ]);
+
+  const matches = transformMatches(
+    matchesResult.matches,
+    scoresResult.matchScores
+  );
+
+  if (matches.length === 0) return null;
+
+  const epaMatches: MatchForEPA[] = matchesResult.matches
+    .map((m, idx) => {
+      const matchResult = matches[idx];
+      if (!matchResult) return null;
+      return { matchNumber: m.matchNumber, ...matchResult };
+    })
+    .filter((m): m is MatchForEPA => m !== null);
+
+  const epaResults = calculateEPA(epaMatches);
+  return { epaResults, epaMatches };
+}
+
+/**
+ * Helper: For a set of team numbers, find EPA data from their other events
+ * in the current season when the selected event has no match data.
+ *
+ * For each team, we look up all their events, find ones with match data,
+ * and use the EPA from the most recent event (by start date).
+ * Teams with no data from any event get a baseline EPA (epa=0).
+ */
+async function getEPAFromOtherEvents(
+  api: ReturnType<typeof getFTCApi>,
+  teamNumbers: number[]
+): Promise<{
+  epaResults: Map<number, EPAResult>;
+  dataSources: Map<number, string>; // teamNumber -> eventCode used
+}> {
+  const epaResults = new Map<number, EPAResult>();
+  const dataSources = new Map<number, string>();
+
+  // Fetch all teams' events in parallel
+  const teamEventsResults = await Promise.all(
+    teamNumbers.map(async (teamNumber) => {
+      try {
+        const { events } = await api.getTeamEvents(teamNumber);
+        return { teamNumber, events };
+      } catch {
+        return { teamNumber, events: [] as { code: string; name: string; dateStart: string }[] };
+      }
+    })
+  );
+
+  // Collect all unique event codes across all teams, sorted by date (most recent first)
+  const eventCodeSet = new Map<string, string>(); // code -> dateStart
+  for (const { events } of teamEventsResults) {
+    for (const event of events) {
+      if (!eventCodeSet.has(event.code)) {
+        eventCodeSet.set(event.code, event.dateStart);
+      }
+    }
+  }
+
+  const sortedEventCodes = Array.from(eventCodeSet.entries())
+    .sort((a, b) => new Date(b[1]).getTime() - new Date(a[1]).getTime())
+    .map(([code]) => code);
+
+  // Cache EPA results per event to avoid redundant API calls
+  const eventEPACache = new Map<string, Map<number, EPAResult> | null>();
+
+  // For each team, find EPA from their most recent event with data
+  for (const { teamNumber, events } of teamEventsResults) {
+    const teamEventCodes = new Set(events.map((e) => e.code));
+
+    // Try events in order of most recent first
+    let found = false;
+    for (const eventCode of sortedEventCodes) {
+      if (!teamEventCodes.has(eventCode)) continue;
+
+      // Check cache or fetch
+      if (!eventEPACache.has(eventCode)) {
+        try {
+          const result = await getEventEPAResults(api, eventCode);
+          eventEPACache.set(eventCode, result?.epaResults ?? null);
+        } catch {
+          eventEPACache.set(eventCode, null);
+        }
+      }
+
+      const cachedEPA = eventEPACache.get(eventCode);
+      if (cachedEPA && cachedEPA.has(teamNumber)) {
+        epaResults.set(teamNumber, cachedEPA.get(teamNumber)!);
+        dataSources.set(teamNumber, eventCode);
+        found = true;
+        break;
+      }
+    }
+
+    // If no EPA found from any event, use baseline (EPA = 0)
+    if (!found) {
+      epaResults.set(teamNumber, {
+        teamNumber,
+        epa: 0,
+        autoEpa: 0,
+        teleopEpa: 0,
+        endgameEpa: 0,
+        matchCount: 0,
+        trend: "stable",
+      });
+      dataSources.set(teamNumber, "baseline");
+    }
+  }
+
+  return { epaResults, dataSources };
+}
+
+/**
  * POST /api/analytics/predict
  * Predict match outcome
  */
@@ -288,32 +420,37 @@ analytics.post("/predict", async (c) => {
 
     const api = getFTCApi();
 
-    const [matchesResult, scoresResult] = await Promise.all([
-      api.getMatches(eventCode, "qual"),
-      api.getScores(eventCode, "qual"),
-    ]);
+    // First, try to get EPA from the selected event
+    const eventEPA = await getEventEPAResults(api, eventCode);
 
-    const matches = transformMatches(
-      matchesResult.matches,
-      scoresResult.matchScores
-    );
+    let epaResults: Map<number, EPAResult>;
+    let dataSource: "event" | "cross-event" | "baseline";
+    let dataSources: Map<number, string> | undefined;
 
-    if (matches.length === 0) {
-      return c.json({
-        success: false,
-        error: "Not enough match data for prediction",
-      });
+    if (eventEPA && eventEPA.epaMatches.length > 0) {
+      // Selected event has match data -- use it directly
+      epaResults = eventEPA.epaResults;
+      dataSource = "event";
+    } else {
+      // No match data for selected event -- look up EPA from other events
+      const teamNumbers = [redTeam1, redTeam2, blueTeam1, blueTeam2];
+      const crossEventResult = await getEPAFromOtherEvents(api, teamNumbers);
+
+      epaResults = crossEventResult.epaResults;
+      dataSources = crossEventResult.dataSources;
+
+      // Check if at least one team has real data (not just baseline)
+      const hasRealData = Array.from(crossEventResult.dataSources.values()).some(
+        (source) => source !== "baseline"
+      );
+
+      if (hasRealData) {
+        dataSource = "cross-event";
+      } else {
+        // All teams are on baseline -- still produce a prediction but flag it
+        dataSource = "baseline";
+      }
     }
-
-    const epaMatches: MatchForEPA[] = matchesResult.matches
-      .map((m, idx) => {
-        const matchResult = matches[idx];
-        if (!matchResult) return null;
-        return { matchNumber: m.matchNumber, ...matchResult };
-      })
-      .filter((m): m is MatchForEPA => m !== null);
-
-    const epaResults = calculateEPA(epaMatches);
 
     const prediction = predictMatch(
       epaResults,
@@ -322,6 +459,16 @@ analytics.post("/predict", async (c) => {
       blueTeam1,
       blueTeam2
     );
+
+    // Build per-team data source info for cross-event predictions
+    const teamDataSources = dataSources
+      ? {
+          [redTeam1]: dataSources.get(redTeam1) || "baseline",
+          [redTeam2]: dataSources.get(redTeam2) || "baseline",
+          [blueTeam1]: dataSources.get(blueTeam1) || "baseline",
+          [blueTeam2]: dataSources.get(blueTeam2) || "baseline",
+        }
+      : undefined;
 
     return c.json({
       success: true,
@@ -340,6 +487,15 @@ analytics.post("/predict", async (c) => {
             prediction.predictedRedScore - prediction.predictedBlueScore
           ),
         },
+        dataSource,
+        ...(teamDataSources && { teamDataSources }),
+        ...(dataSource === "baseline" && {
+          warning:
+            "No match data available for any of these teams in the current season. Prediction is based on season average baseline scores.",
+        }),
+        ...(dataSource === "cross-event" && {
+          note: "EPA data sourced from teams' other events this season (selected event has no match data yet).",
+        }),
       },
     });
   } catch (error) {
