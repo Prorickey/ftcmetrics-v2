@@ -18,7 +18,12 @@ interface UserTeam {
 
 interface ScoutingNote {
   id: string;
-  aboutTeamNumber: number;
+  aboutTeamId: string;
+  aboutTeam: {
+    id: string;
+    teamNumber: number;
+    name: string;
+  };
   eventCode?: string;
   reliabilityRating?: number;
   driverSkillRating?: number;
@@ -469,10 +474,10 @@ function NotesContent() {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <Link
-                    href={`/analytics/team/${note.aboutTeamNumber}`}
+                    href={`/analytics/team/${note.aboutTeam.teamNumber}`}
                     className="text-xl font-bold text-ftc-orange hover:underline"
                   >
-                    Team {note.aboutTeamNumber}
+                    Team {note.aboutTeam.teamNumber} - {note.aboutTeam.name}
                   </Link>
                   {note.eventCode && (
                     <p className="text-sm text-gray-500 dark:text-gray-400">

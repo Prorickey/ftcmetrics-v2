@@ -509,6 +509,23 @@ function TeamAnalyticsContent() {
     (e) => new Date(e.dateStart) >= now
   );
 
+  if (isNaN(teamNumber)) {
+    return (
+      <div className="max-w-lg mx-auto text-center py-12">
+        <h2 className="text-xl font-semibold mb-2">Invalid Team Number</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          The team number in the URL is not valid. Please check the link and try again.
+        </p>
+        <Link
+          href="/analytics"
+          className="px-4 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90"
+        >
+          Back to Analytics
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
