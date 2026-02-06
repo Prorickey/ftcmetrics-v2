@@ -18,7 +18,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <Link
           href="/scout"
           className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-ftc-orange dark:hover:border-ftc-orange transition-colors group"
@@ -116,6 +116,31 @@ export default async function DashboardPage() {
           <h3 className="font-semibold text-lg mb-1">My Teams</h3>
           <p className="text-gray-600 dark:text-gray-400 text-sm">
             Manage teams
+          </p>
+        </Link>
+
+        <Link
+          href="/rankings"
+          className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-yellow-500 dark:hover:border-yellow-500 transition-colors group"
+        >
+          <div className="w-12 h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-yellow-500/20 transition-colors">
+            <svg
+              className="w-6 h-6 text-yellow-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 10h2l1-2h4l1 2h2l1-2h4l1 2h2M5 21V10m14 11V10M12 3l3 7H9l3-7z"
+              />
+            </svg>
+          </div>
+          <h3 className="font-semibold text-lg mb-1">Rankings</h3>
+          <p className="text-gray-600 dark:text-gray-400 text-sm">
+            Global EPA leaderboard
           </p>
         </Link>
       </div>
