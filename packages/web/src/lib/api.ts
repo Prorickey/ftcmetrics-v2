@@ -524,6 +524,29 @@ export const ftcTeamsApi = {
   },
 };
 
+// Rankings API (global season-wide)
+export const rankingsApi = {
+  getGlobalEPA: async () => {
+    return fetchApi<{
+      season: number;
+      totalTeams: number;
+      totalMatches: number;
+      eventsProcessed: number;
+      lastUpdated: string;
+      rankings: Array<{
+        rank: number;
+        teamNumber: number;
+        epa: number;
+        autoEpa: number;
+        teleopEpa: number;
+        endgameEpa: number;
+        matchCount: number;
+        trend: "up" | "down" | "stable";
+      }>;
+    }>("/api/rankings/epa");
+  },
+};
+
 // Analytics API
 export interface OPRResult {
   teamNumber: number;

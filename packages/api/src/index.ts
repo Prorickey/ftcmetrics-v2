@@ -17,6 +17,7 @@ import teams from "./routes/teams";
 import userTeams from "./routes/user-teams";
 import scouting from "./routes/scouting";
 import analytics from "./routes/analytics";
+import rankings from "./routes/rankings";
 
 // Import middleware
 import { rateLimit, sanitizeInput } from "./middleware/auth";
@@ -135,6 +136,7 @@ app.route("/api/teams", teams);
 app.route("/api/user-teams", userTeams);
 app.route("/api/scouting", scouting);
 app.route("/api/analytics", analytics);
+app.route("/api/rankings", rankings);
 
 // Start server
 const port = parseInt(process.env.PORT || "3001", 10);

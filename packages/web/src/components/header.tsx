@@ -39,6 +39,12 @@ export function Header() {
               Analytics
             </Link>
             <Link
+              href="/rankings"
+              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+            >
+              Rankings
+            </Link>
+            <Link
               href="/my-teams"
               className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
