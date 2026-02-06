@@ -40,7 +40,7 @@ function AnalyticsContent() {
   const [activeTab, setActiveTab] = useState<"opr" | "epa">("epa");
 
   // Search mode toggle
-  const [searchMode, setSearchMode] = useState<"event" | "team">("event");
+  const [searchMode, setSearchMode] = useState<"event" | "team">("team");
 
   // Team search state
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
@@ -510,6 +510,12 @@ function AnalyticsContent() {
               className="px-4 py-2 bg-ftc-blue text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
             >
               Match Predictor
+            </Link>
+            <Link
+              href={`/analytics/rankings?event=${selectedEventCode}`}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+            >
+              Rankings
             </Link>
           </div>
 
