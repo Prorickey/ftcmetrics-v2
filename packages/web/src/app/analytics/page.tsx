@@ -49,6 +49,7 @@ function AnalyticsContent() {
   const [showTeamDropdown, setShowTeamDropdown] = useState(false);
   const teamSearchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const searchCounterRef = useRef(0);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,7 +97,7 @@ function AnalyticsContent() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Debounced team search
+  // Debounced team search with race condition protection
   const handleTeamSearchInput = useCallback(
     (value: string) => {
       setTeamSearchQuery(value);
@@ -106,25 +107,54 @@ function AnalyticsContent() {
       if (!value.trim()) {
         setTeamSearchResults([]);
         setShowTeamDropdown(false);
+        searchCounterRef.current++;
         return;
       }
 
       debounceRef.current = setTimeout(async () => {
+        const thisSearch = ++searchCounterRef.current;
         setTeamSearchLoading(true);
         try {
           const result = await ftcTeamsApi.search(value.trim());
+          // Discard stale responses: only update state if this is still the latest search
+          if (thisSearch !== searchCounterRef.current) return;
           if (result.success && result.data) {
             setTeamSearchResults(result.data);
             setShowTeamDropdown(true);
+          } else {
+            setTeamSearchResults([]);
+            setShowTeamDropdown(true);
           }
         } catch {
+          if (thisSearch !== searchCounterRef.current) return;
           setTeamSearchResults([]);
+          setShowTeamDropdown(true);
         } finally {
-          setTeamSearchLoading(false);
+          if (thisSearch === searchCounterRef.current) {
+            setTeamSearchLoading(false);
+          }
         }
       }, 300);
     },
     []
+  );
+
+  // Handle Enter key to navigate directly to team page
+  const handleTeamSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        const trimmed = teamSearchQuery.trim();
+        const isNumeric = /^\d+$/.test(trimmed);
+        if (isNumeric && parseInt(trimmed, 10) > 0) {
+          setShowTeamDropdown(false);
+          router.push(`/analytics/team/${trimmed}`);
+        } else if (teamSearchResults.length > 0) {
+          setShowTeamDropdown(false);
+          router.push(`/analytics/team/${teamSearchResults[0].teamNumber}`);
+        }
+      }
+    },
+    [teamSearchQuery, teamSearchResults, router]
   );
 
   // Get unique countries for filter
@@ -389,9 +419,10 @@ function AnalyticsContent() {
               </svg>
               <input
                 type="text"
-                placeholder="Search by team number or name..."
+                placeholder="Search by team number or name (Enter to go)..."
                 value={teamSearchQuery}
                 onChange={(e) => handleTeamSearchInput(e.target.value)}
+                onKeyDown={handleTeamSearchKeyDown}
                 onFocus={() => {
                   if (teamSearchResults.length > 0) setShowTeamDropdown(true);
                 }}
@@ -444,7 +475,13 @@ function AnalyticsContent() {
               !teamSearchLoading &&
               teamSearchQuery.trim().length > 0 && (
                 <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                  No teams found. Try browsing an event first to populate the search index.
+                  {/^\d+$/.test(teamSearchQuery.trim()) ? (
+                    <>
+                      No cached results. Press <strong>Enter</strong> to look up team {teamSearchQuery.trim()} directly.
+                    </>
+                  ) : (
+                    "No teams found. Try a team number or browse an event first to populate the search index."
+                  )}
                 </div>
               )}
           </div>
