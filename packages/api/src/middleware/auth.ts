@@ -178,7 +178,12 @@ export function rateLimit(
  * Trims strings and removes potentially dangerous characters
  */
 export async function sanitizeInput(c: Context, next: Next) {
-  if (c.req.header("Content-Type")?.includes("application/json")) {
+  const method = c.req.method.toUpperCase();
+  if (
+    method !== "GET" &&
+    method !== "HEAD" &&
+    c.req.header("Content-Type")?.includes("application/json")
+  ) {
     try {
       const body = await c.req.json();
       const sanitized = sanitizeObject(body);

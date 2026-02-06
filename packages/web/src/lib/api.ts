@@ -16,12 +16,16 @@ async function fetchApi<T>(
 ): Promise<ApiResponse<T>> {
   const url = `${API_URL}${endpoint}`;
 
+  // Only set Content-Type for requests with a body (POST, PUT, PATCH, etc.)
+  // Setting it on GET requests triggers unnecessary CORS preflight
+  const headers: Record<string, string> = { ...options.headers as Record<string, string> };
+  if (options.body) {
+    headers["Content-Type"] = headers["Content-Type"] || "application/json";
+  }
+
   const response = await fetch(url, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    headers,
     credentials: "include",
   });
 
