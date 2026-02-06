@@ -221,10 +221,10 @@ function SeasonalPerformance({ data, loading }: { data: SeasonalDataPoint[]; loa
                     }
                     return "";
                   }}
-                  formatter={(value: number) => [
-                    `${value >= 0 ? "+" : ""}${value.toFixed(1)}`,
-                    "EPA",
-                  ]}
+                  formatter={(value) => {
+                    const v = Number(value) || 0;
+                    return [`${v >= 0 ? "+" : ""}${v.toFixed(1)}`, "EPA"];
+                  }}
                 />
                 <Line
                   type="monotone"
@@ -282,7 +282,7 @@ function SeasonalPerformance({ data, loading }: { data: SeasonalDataPoint[]; loa
                     }
                     return "";
                   }}
-                  formatter={(value: number) => [value.toFixed(1), "OPR"]}
+                  formatter={(value) => [(Number(value) || 0).toFixed(1), "OPR"]}
                 />
                 <Bar
                   dataKey="opr"
@@ -331,10 +331,11 @@ function SeasonalPerformance({ data, loading }: { data: SeasonalDataPoint[]; loa
                   color: "#f3f4f6",
                   fontSize: 13,
                 }}
-                formatter={(value: number, name: string) => {
+                formatter={(value, name) => {
+                  const v = Number(value) || 0;
                   const label = name === "epa" ? "EPA" : "OPR";
-                  const prefix = name === "epa" && value >= 0 ? "+" : "";
-                  return [`${prefix}${value.toFixed(1)}`, label];
+                  const prefix = name === "epa" && v >= 0 ? "+" : "";
+                  return [`${prefix}${v.toFixed(1)}`, label];
                 }}
               />
               <Legend
