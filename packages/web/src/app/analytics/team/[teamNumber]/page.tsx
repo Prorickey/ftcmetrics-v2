@@ -11,6 +11,18 @@ import {
   type EPAResult,
   type TeamMatchBreakdown,
 } from "@/lib/api";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 
 interface TeamInfo {
   teamNumber: number;
@@ -56,6 +68,298 @@ interface EventDetail {
   matches: TeamMatchBreakdown[] | null;
 }
 
+interface SeasonalDataPoint {
+  eventCode: string;
+  eventName: string;
+  shortName: string;
+  epa: number | null;
+  opr: number | null;
+  autoEpa: number | null;
+  teleopEpa: number | null;
+  endgameEpa: number | null;
+  autoOpr: number | null;
+  teleopOpr: number | null;
+  endgameOpr: number | null;
+}
+
+function abbreviateEventName(name: string): string {
+  if (name.length <= 18) return name;
+  // Try removing common prefixes/suffixes
+  const shortened = name
+    .replace(/FIRST Tech Challenge /i, "")
+    .replace(/ Qualifier/i, " Qual")
+    .replace(/ Championship/i, " Champ")
+    .replace(/ Tournament/i, " Tourn")
+    .replace(/ Regional/i, " Reg")
+    .replace(/ Invitational/i, " Inv");
+  if (shortened.length <= 18) return shortened;
+  return shortened.substring(0, 16) + "...";
+}
+
+function SeasonalPerformance({ data, loading }: { data: SeasonalDataPoint[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
+        <div className="h-5 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-2" />
+        <div className="h-4 w-32 bg-gray-100 dark:bg-gray-800 rounded animate-pulse mb-6" />
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="h-[300px] bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+          <div className="h-[300px] bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+        </div>
+        <div className="h-[300px] bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse mt-6" />
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-1">Seasonal Performance</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No seasonal data available
+        </p>
+      </div>
+    );
+  }
+
+  const epaData = data.filter((d) => d.epa !== null);
+  const oprData = data.filter((d) => d.opr !== null);
+
+  // Find the most recent event with component breakdown data
+  const latestWithBreakdown = [...data]
+    .reverse()
+    .find(
+      (d) =>
+        d.autoEpa !== null ||
+        d.teleopEpa !== null ||
+        d.endgameEpa !== null
+    );
+
+  const hasEpaChart = epaData.length > 0;
+  const hasOprChart = oprData.length > 0;
+  const hasBreakdown = latestWithBreakdown !== null && latestWithBreakdown !== undefined;
+
+  if (!hasEpaChart && !hasOprChart) {
+    return (
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-1">Seasonal Performance</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No seasonal data available
+        </p>
+      </div>
+    );
+  }
+
+  const breakdownData = hasBreakdown
+    ? [
+        {
+          name: "Auto",
+          epa: latestWithBreakdown.autoEpa ?? 0,
+          opr: latestWithBreakdown.autoOpr ?? 0,
+        },
+        {
+          name: "Teleop",
+          epa: latestWithBreakdown.teleopEpa ?? 0,
+          opr: latestWithBreakdown.teleopOpr ?? 0,
+        },
+        {
+          name: "Endgame",
+          epa: latestWithBreakdown.endgameEpa ?? 0,
+          opr: latestWithBreakdown.endgameOpr ?? 0,
+        },
+      ]
+    : [];
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
+      <h2 className="text-lg font-semibold mb-1">Seasonal Performance</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+        Across {data.length} event{data.length !== 1 ? "s" : ""}
+      </p>
+
+      {/* EPA and OPR charts side by side on desktop */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* EPA Line Chart */}
+        {hasEpaChart && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
+              EPA Across Events
+            </h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart
+                data={epaData}
+                margin={{ top: 5, right: 20, left: 0, bottom: 60 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="currentColor"
+                  className="text-gray-200 dark:text-gray-700"
+                />
+                <XAxis
+                  dataKey="shortName"
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  angle={-35}
+                  textAnchor="end"
+                  height={60}
+                  interval={0}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  width={45}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(17, 24, 39, 0.95)",
+                    border: "1px solid #374151",
+                    borderRadius: "8px",
+                    color: "#f3f4f6",
+                    fontSize: 13,
+                  }}
+                  labelFormatter={(_, payload) => {
+                    if (payload && payload.length > 0) {
+                      return payload[0]?.payload?.eventName || "";
+                    }
+                    return "";
+                  }}
+                  formatter={(value: number) => [
+                    `${value >= 0 ? "+" : ""}${value.toFixed(1)}`,
+                    "EPA",
+                  ]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="epa"
+                  stroke="#f57c25"
+                  strokeWidth={2.5}
+                  dot={{ r: 5, fill: "#f57c25", strokeWidth: 0 }}
+                  activeDot={{ r: 7, fill: "#f57c25", strokeWidth: 2, stroke: "#fff" }}
+                  name="EPA"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* OPR Bar Chart */}
+        {hasOprChart && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
+              OPR Across Events
+            </h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart
+                data={oprData}
+                margin={{ top: 5, right: 20, left: 0, bottom: 60 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="currentColor"
+                  className="text-gray-200 dark:text-gray-700"
+                />
+                <XAxis
+                  dataKey="shortName"
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  angle={-35}
+                  textAnchor="end"
+                  height={60}
+                  interval={0}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  width={45}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(17, 24, 39, 0.95)",
+                    border: "1px solid #374151",
+                    borderRadius: "8px",
+                    color: "#f3f4f6",
+                    fontSize: 13,
+                  }}
+                  labelFormatter={(_, payload) => {
+                    if (payload && payload.length > 0) {
+                      return payload[0]?.payload?.eventName || "";
+                    }
+                    return "";
+                  }}
+                  formatter={(value: number) => [value.toFixed(1), "OPR"]}
+                />
+                <Bar
+                  dataKey="opr"
+                  fill="#3b82f6"
+                  radius={[4, 4, 0, 0]}
+                  name="OPR"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {/* Component Breakdown Chart */}
+      {hasBreakdown && (
+        <div className="mt-6">
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+            Component Breakdown
+          </h3>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+            {latestWithBreakdown.eventName}
+          </p>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart
+              data={breakdownData}
+              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="currentColor"
+                className="text-gray-200 dark:text-gray-700"
+              />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 12, fill: "#9ca3af" }}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                width={45}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "rgba(17, 24, 39, 0.95)",
+                  border: "1px solid #374151",
+                  borderRadius: "8px",
+                  color: "#f3f4f6",
+                  fontSize: 13,
+                }}
+                formatter={(value: number, name: string) => {
+                  const label = name === "epa" ? "EPA" : "OPR";
+                  const prefix = name === "epa" && value >= 0 ? "+" : "";
+                  return [`${prefix}${value.toFixed(1)}`, label];
+                }}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 12 }}
+              />
+              <Bar
+                dataKey="epa"
+                name="EPA"
+                fill="#f57c25"
+                radius={[4, 4, 0, 0]}
+              />
+              <Bar
+                dataKey="opr"
+                name="OPR"
+                fill="#3b82f6"
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TeamAnalyticsContent() {
   const params = useParams();
   const teamNumber = parseInt(params.teamNumber as string, 10);
@@ -68,11 +372,14 @@ function TeamAnalyticsContent() {
     Record<string, EventDetail>
   >({});
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
+  const [seasonalData, setSeasonalData] = useState<SeasonalDataPoint[]>([]);
+  const [seasonalLoading, setSeasonalLoading] = useState(true);
 
   // Fetch team info and event summaries in parallel
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
+      setSeasonalLoading(true);
       try {
         const [teamResult, summariesResult] = await Promise.all([
           ftcTeamsApi.getTeam(teamNumber),
@@ -82,13 +389,71 @@ function TeamAnalyticsContent() {
         if (teamResult.success && teamResult.data) {
           setTeamInfo(teamResult.data);
         }
+
+        let summaries: EventSummary[] = [];
         if (summariesResult.success && summariesResult.data) {
-          setEventSummaries(summariesResult.data);
+          summaries = summariesResult.data;
+          setEventSummaries(summaries);
+        }
+
+        setLoading(false);
+
+        // Now fetch EPA/OPR for all past events in parallel for the seasonal charts
+        const now = new Date();
+        const pastEvents = summaries
+          .filter((e) => new Date(e.dateStart) < now)
+          .sort(
+            (a, b) =>
+              new Date(a.dateStart).getTime() - new Date(b.dateStart).getTime()
+          );
+
+        if (pastEvents.length > 0) {
+          const analyticsResults = await Promise.all(
+            pastEvents.map((event) =>
+              analyticsApi
+                .getTeamAnalytics(teamNumber, event.eventCode)
+                .then((result) => ({
+                  eventCode: event.eventCode,
+                  eventName: event.eventName,
+                  result,
+                }))
+                .catch(() => ({
+                  eventCode: event.eventCode,
+                  eventName: event.eventName,
+                  result: { success: false as const, data: null, error: "Failed" },
+                }))
+            )
+          );
+
+          const seasonal: SeasonalDataPoint[] = analyticsResults.map(
+            ({ eventCode, eventName, result }) => {
+              const epa = result.success ? result.data?.epa ?? null : null;
+              const opr = result.success ? result.data?.opr ?? null : null;
+              return {
+                eventCode,
+                eventName,
+                shortName: abbreviateEventName(eventName),
+                epa: epa?.epa ?? null,
+                opr: opr?.opr ?? null,
+                autoEpa: epa?.autoEpa ?? null,
+                teleopEpa: epa?.teleopEpa ?? null,
+                endgameEpa: epa?.endgameEpa ?? null,
+                autoOpr: opr?.autoOpr ?? null,
+                teleopOpr: opr?.teleopOpr ?? null,
+                endgameOpr: opr?.endgameOpr ?? null,
+              };
+            }
+          );
+
+          setSeasonalData(seasonal);
+        } else {
+          setSeasonalData([]);
         }
       } catch (err) {
         console.error("Failed to fetch team data:", err);
-      } finally {
         setLoading(false);
+      } finally {
+        setSeasonalLoading(false);
       }
     }
     fetchData();
@@ -205,6 +570,9 @@ function TeamAnalyticsContent() {
         </div>
       ) : (
         <div className="space-y-3">
+          {/* Seasonal Performance Charts */}
+          <SeasonalPerformance data={seasonalData} loading={seasonalLoading} />
+
           {/* Past Events */}
           {pastEvents.length > 0 && (
             <div className="space-y-3">
