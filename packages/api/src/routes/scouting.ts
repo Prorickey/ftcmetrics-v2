@@ -888,12 +888,59 @@ scouting.post("/notes", async (c) => {
       });
     }
 
+    // Ensure event exists in local DB if eventCode is provided
+    if (eventCode) {
+      let event = await prisma.event.findUnique({
+        where: { eventCode },
+      });
+
+      if (!event) {
+        // Try to fetch real event data from FTC API
+        try {
+          const api = getFTCApi();
+          const { events: eventList } = await api.getEvent(eventCode);
+          if (eventList.length > 0) {
+            const ftcEvent = eventList[0];
+            event = await prisma.event.create({
+              data: {
+                eventCode,
+                season: 2025,
+                name: ftcEvent.name,
+                startDate: new Date(ftcEvent.dateStart),
+                endDate: new Date(ftcEvent.dateEnd),
+                venue: ftcEvent.venue || null,
+                city: ftcEvent.city || null,
+                stateProv: ftcEvent.stateprov || null,
+                country: ftcEvent.country || null,
+                timezone: ftcEvent.timezone || null,
+              },
+            });
+          }
+        } catch {
+          // FTC API unavailable, fall through to placeholder
+        }
+
+        // Create placeholder event if API fetch didn't work
+        if (!event) {
+          event = await prisma.event.create({
+            data: {
+              eventCode,
+              season: 2025,
+              name: eventCode,
+              startDate: new Date(),
+              endDate: new Date(),
+            },
+          });
+        }
+      }
+    }
+
     const note = await prisma.scoutingNote.create({
       data: {
         authorId: userId,
         notingTeamId,
         aboutTeamId: aboutTeam.id,
-        eventCode,
+        eventCode: eventCode || null,
         reliabilityRating,
         driverSkillRating,
         defenseRating,
