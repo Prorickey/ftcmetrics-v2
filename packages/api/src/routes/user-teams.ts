@@ -413,6 +413,7 @@ userTeams.post("/join", async (c) => {
     return c.json({
       success: true,
       data: {
+        teamId: invite.teamId,
         team: invite.team,
         role: "STUDENT",
       },
