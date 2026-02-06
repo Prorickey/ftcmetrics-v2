@@ -28,6 +28,8 @@ jobs:
           context: .
           file: packages/web/Dockerfile
           push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
           tags: |
             ${{ env.REGISTRY }}/ftc8569/ftcmetrics-web:latest
             ${{ env.REGISTRY }}/ftc8569/ftcmetrics-web:${{ github.sha }}
