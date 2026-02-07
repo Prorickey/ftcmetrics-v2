@@ -235,18 +235,16 @@ async function performAllianceDeduction(entryId: string): Promise<{
   let partnerEndgameScore: number;
   let partnerTotalScore: number;
 
-  // DECODE API uses teleopPoints (includes endgame base) instead of dcPoints + endgamePoints
-  const allianceAutoPoints = allianceData.autoPoints || 0;
-  const allianceTeleopPoints = allianceData.dcPoints || (allianceData as Record<string, unknown>).teleopPoints as number || 0;
-  const allianceEndgamePoints = allianceData.endgamePoints || (allianceData as Record<string, unknown>).teleopBasePoints as number || 0;
-  // If teleopPoints includes endgame (DECODE), subtract endgame from teleop to avoid double-counting
-  const teleopOnly = allianceData.dcPoints ? allianceTeleopPoints : Math.max(0, allianceTeleopPoints - allianceEndgamePoints);
+  // DECODE API uses teleopPoints (pure teleop) + teleopBasePoints (endgame) instead of dcPoints + endgamePoints
+  const allianceAutoPoints = allianceData.autoPoints ?? 0;
+  const allianceTeleopPoints = allianceData.dcPoints ?? (allianceData as Record<string, unknown>).teleopPoints as number ?? 0;
+  const allianceEndgamePoints = allianceData.endgamePoints ?? (allianceData as Record<string, unknown>).teleopBasePoints as number ?? 0;
 
-  const hasPhaseBreakdown = allianceAutoPoints > 0 || teleopOnly > 0 || allianceEndgamePoints > 0;
+  const hasPhaseBreakdown = allianceAutoPoints > 0 || allianceTeleopPoints > 0 || allianceEndgamePoints > 0;
 
   if (hasPhaseBreakdown) {
     partnerAutoScore = Math.max(0, allianceAutoPoints - entry.autoScore);
-    partnerTeleopScore = Math.max(0, teleopOnly - entry.teleopScore);
+    partnerTeleopScore = Math.max(0, allianceTeleopPoints - entry.teleopScore);
     partnerEndgameScore = Math.max(0, allianceEndgamePoints - entry.endgameScore);
     partnerTotalScore = partnerAutoScore + partnerTeleopScore + partnerEndgameScore;
   } else {
