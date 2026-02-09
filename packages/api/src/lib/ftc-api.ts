@@ -24,8 +24,8 @@ interface CacheTTL {
 const CACHE_TTLS: { pattern: RegExp; ttl: CacheTTL }[] = [
   { pattern: /^\/matches\//, ttl: { freshTtl: 120, staleTtl: 86400 } },       // 2min / 24h
   { pattern: /^\/scores\//, ttl: { freshTtl: 120, staleTtl: 86400 } },        // 2min / 24h
-  { pattern: /^\/rankings\//, ttl: { freshTtl: 300, staleTtl: 86400 } },      // 5min / 24h
-  { pattern: /^\/schedule\//, ttl: { freshTtl: 3600, staleTtl: 604800 } },    // 1h / 7d
+  { pattern: /^\/rankings\//, ttl: { freshTtl: 120, staleTtl: 86400 } },      // 2min / 24h
+  { pattern: /^\/schedule\//, ttl: { freshTtl: 120, staleTtl: 86400 } },      // 2min / 24h
   { pattern: /^\/teams/, ttl: { freshTtl: 86400, staleTtl: 604800 } },        // 24h / 7d
   { pattern: /^\/events/, ttl: { freshTtl: 21600, staleTtl: 604800 } },       // 6h / 7d
 ];
