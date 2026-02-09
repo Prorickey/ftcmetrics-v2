@@ -14,6 +14,7 @@
     "@hono/node-server": "^1.19.9",
     "dotenv": "^17.2.3",
     "hono": "^4.11.5",
+    "ioredis": "^5.9.2",
     "ml-matrix": "^6.12.1"
   },
   "devDependencies": {
