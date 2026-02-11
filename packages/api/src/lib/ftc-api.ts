@@ -5,12 +5,42 @@
  * Base URL: https://ftc-events.firstinspires.org/api/v2.0
  */
 
+import { getRedis } from "./redis";
+
 const FTC_API_BASE = "https://ftc-api.firstinspires.org/v2.0";
 const CURRENT_SEASON = 2025; // DECODE season
 
 interface FTCApiConfig {
   username: string;
   token: string;
+}
+
+// TTL configuration: endpoint pattern -> { freshTtl, staleTtl } in seconds
+interface CacheTTL {
+  freshTtl: number;
+  staleTtl: number;
+}
+
+const CACHE_TTLS: { pattern: RegExp; ttl: CacheTTL }[] = [
+  { pattern: /^\/matches\//, ttl: { freshTtl: 120, staleTtl: 86400 } },       // 2min / 24h
+  { pattern: /^\/scores\//, ttl: { freshTtl: 120, staleTtl: 86400 } },        // 2min / 24h
+  { pattern: /^\/rankings\//, ttl: { freshTtl: 120, staleTtl: 86400 } },      // 2min / 24h
+  { pattern: /^\/schedule\//, ttl: { freshTtl: 120, staleTtl: 86400 } },      // 2min / 24h
+  { pattern: /^\/teams/, ttl: { freshTtl: 86400, staleTtl: 604800 } },        // 24h / 7d
+  { pattern: /^\/events/, ttl: { freshTtl: 21600, staleTtl: 604800 } },       // 6h / 7d
+];
+
+function getTTL(endpoint: string): CacheTTL {
+  for (const { pattern, ttl } of CACHE_TTLS) {
+    if (pattern.test(endpoint)) return ttl;
+  }
+  // Default: 5min fresh, 1h stale
+  return { freshTtl: 300, staleTtl: 3600 };
+}
+
+interface CacheEntry<T> {
+  data: T;
+  cachedAt: number; // epoch ms
 }
 
 // API Response Types
@@ -116,21 +146,77 @@ class FTCEventsAPI {
 
   private async fetch<T>(endpoint: string): Promise<T> {
     const url = `${FTC_API_BASE}/${CURRENT_SEASON}${endpoint}`;
+    const cacheKey = `ftc-api:${CURRENT_SEASON}:${endpoint}`;
+    const { freshTtl, staleTtl } = getTTL(endpoint);
+    const redis = getRedis();
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: this.getAuthHeader(),
-        Accept: "application/json",
-      },
-    });
+    // 1. Check cache
+    if (redis) {
+      try {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          const entry: CacheEntry<T> = JSON.parse(cached);
+          const ageSeconds = (Date.now() - entry.cachedAt) / 1000;
 
-    if (!response.ok) {
-      throw new Error(
-        `FTC API Error: ${response.status} ${response.statusText}`
-      );
+          if (ageSeconds < freshTtl) {
+            return entry.data;
+          }
+          // Stale — fall through to fetch, but entry is available for fallback
+        }
+      } catch {
+        // Redis read failed, proceed without cache
+      }
     }
 
-    return response.json();
+    // 2. Fetch from FTC API
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: this.getAuthHeader(),
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `FTC API Error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = (await response.json()) as T;
+
+      // 3. Store in cache
+      if (redis) {
+        const entry: CacheEntry<T> = { data, cachedAt: Date.now() };
+        try {
+          await redis.set(cacheKey, JSON.stringify(entry), "EX", staleTtl);
+        } catch {
+          // Cache write failed, non-fatal
+        }
+      }
+
+      return data;
+    } catch (apiError) {
+      // 4. On API failure, try stale cache fallback
+      if (redis) {
+        try {
+          const cached = await redis.get(cacheKey);
+          if (cached) {
+            const entry: CacheEntry<T> = JSON.parse(cached);
+            const ageSeconds = Math.round((Date.now() - entry.cachedAt) / 1000);
+            console.warn(
+              `[FTC Cache] FTC API unavailable for ${endpoint}, serving stale cache (${ageSeconds}s old)`
+            );
+            return entry.data;
+          }
+        } catch {
+          // Redis also failed, throw original error
+        }
+      }
+
+      // No cache available — throw the original API error
+      throw apiError;
+    }
   }
 
   /**

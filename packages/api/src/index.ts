@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prisma } from "@ftcmetrics/db";
+import { isRedisHealthy } from "./lib/redis";
 
 // Import routes
 import events from "./routes/events";
@@ -108,6 +109,7 @@ app.get("/api/health", async (c) => {
   const checks: Record<string, string> = {
     api: "healthy",
     database: "unknown",
+    redis: "unknown",
   };
 
   // Check database connectivity
@@ -118,15 +120,20 @@ app.get("/api/health", async (c) => {
     checks.database = "unhealthy";
   }
 
-  const allHealthy = Object.values(checks).every((s) => s === "healthy");
+  // Check Redis connectivity (degraded, not unhealthy — app works without it)
+  checks.redis = (await isRedisHealthy()) ? "healthy" : "degraded";
+
+  const isHealthy =
+    checks.api === "healthy" && checks.database === "healthy";
+  const isDegraded = !isHealthy || checks.redis === "degraded";
 
   return c.json(
     {
-      status: allHealthy ? "healthy" : "degraded",
+      status: isHealthy ? (isDegraded ? "degraded" : "healthy") : "unhealthy",
       timestamp: new Date().toISOString(),
       checks,
     },
-    allHealthy ? 200 : 503
+    isHealthy ? 200 : 503
   );
 });
 
