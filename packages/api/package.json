@@ -6,19 +6,22 @@
     "dev": "bun run --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target node",
     "start": "bun run dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@ftcmetrics/db": "workspace:*",
     "@ftcmetrics/shared": "workspace:*",
     "@hono/node-server": "^1.19.9",
-    "dotenv": "^17.2.3",
-    "hono": "^4.11.5",
-    "ioredis": "^5.9.2",
-    "ml-matrix": "^6.12.1"
+    "dotenv": "^17.3.1",
+    "hono": "^4.12.1",
+    "ioredis": "^5.9.3",
+    "ml-matrix": "^6.12.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^22.12.0",
-    "typescript": "^5.7.3"
+    "@types/node": "^25.3.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

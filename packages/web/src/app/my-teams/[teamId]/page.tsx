@@ -863,7 +863,10 @@ function renderMarkdown(text: string): string {
   // Links: [text](url)
   html = html.replace(
     /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+    (_match: string, linkText: string, url: string) => {
+      const safeUrl = url.replace(/"/g, '&quot;');
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
+    }
   );
   // Bold: **text**
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");

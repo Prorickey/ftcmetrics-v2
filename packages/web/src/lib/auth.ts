@@ -11,6 +11,10 @@ import Discord from "next-auth/providers/discord";
 import GitHub from "next-auth/providers/github";
 import { prisma } from "@ftcmetrics/db";
 
+if (!process.env.NEXTAUTH_SECRET && !process.env.AUTH_SECRET) {
+  throw new Error("NEXTAUTH_SECRET or AUTH_SECRET environment variable must be set");
+}
+
 const nextAuth: NextAuthResult = NextAuth({
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
   adapter: PrismaAdapter(prisma),
@@ -18,17 +22,14 @@ const nextAuth: NextAuthResult = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
     }),
     Discord({
       clientId: process.env.DISCORD_CLIENT_ID!,
       clientSecret: process.env.DISCORD_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
     }),
     GitHub({
       clientId: process.env.GITHUB_CLIENT_ID!,
       clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
     }),
   ],
   pages: {

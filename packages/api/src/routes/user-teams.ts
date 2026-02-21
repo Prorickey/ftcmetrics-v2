@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { prisma } from "@ftcmetrics/db";
 import { getFTCApi } from "../lib/ftc-api";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import path from "path";
 import fs from "fs";
 
@@ -28,12 +28,7 @@ const userTeams = new Hono();
  * Helper to generate random invite code
  */
 function generateInviteCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
+  return randomBytes(12).toString("base64url").slice(0, 16);
 }
 
 /**
@@ -82,7 +77,7 @@ userTeams.post("/", async (c) => {
   }
 
   try {
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
     const { teamNumber, name } = body;
 
     if (!teamNumber || typeof teamNumber !== "number") {
@@ -242,7 +237,7 @@ userTeams.patch("/:teamId", async (c) => {
       );
     }
 
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
     const { name, sharingLevel, bio, robotName, robotDesc, drivetrainType, links } = body;
 
     const updateData: Record<string, unknown> = {};
@@ -335,12 +330,16 @@ userTeams.post("/:teamId/invites", async (c) => {
       attempts++;
     }
 
+    const body = (c as any).get("sanitizedBody") || {};
+    const maxUses = typeof body.maxUses === "number" && body.maxUses > 0 ? body.maxUses : undefined;
+
     const invite = await prisma.teamInvite.create({
       data: {
         teamId,
         code,
         createdBy: userId,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        ...(maxUses !== undefined ? { maxUses } : {}),
       },
     });
 
@@ -366,7 +365,7 @@ userTeams.post("/join", async (c) => {
   }
 
   try {
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
     const { code } = body;
 
     if (!code) {
@@ -385,6 +384,10 @@ userTeams.post("/join", async (c) => {
 
     if (invite.expiresAt < new Date()) {
       return c.json({ success: false, error: "Invite code expired" }, 410);
+    }
+
+    if (invite.maxUses !== null && invite.uses >= invite.maxUses) {
+      return c.json({ success: false, error: "Invite code has reached maximum uses" }, 400);
     }
 
     // Check if already a member
@@ -408,6 +411,12 @@ userTeams.post("/join", async (c) => {
         teamId: invite.teamId,
         role: "STUDENT",
       },
+    });
+
+    // Increment invite usage count
+    await prisma.teamInvite.update({
+      where: { id: invite.id },
+      data: { uses: { increment: 1 } },
     });
 
     return c.json({
@@ -530,18 +539,17 @@ userTeams.patch("/:teamId/members/:memberId", async (c) => {
       return c.json({ success: false, error: "Member not found" }, 404);
     }
 
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
     const { role } = body;
 
     if (!role || !["MENTOR", "LEADER", "STUDENT", "FRIEND"].includes(role)) {
       return c.json({ success: false, error: "Invalid role" }, 400);
     }
 
-    // Check permissions: Must be admin (MENTOR/LEADER) or updating own role
-    const isSelf = targetMember.userId === userId;
+    // Only admins (MENTOR/LEADER) can change roles
     const isAdmin = userMembership.role === "MENTOR" || userMembership.role === "LEADER";
 
-    if (!isSelf && !isAdmin) {
+    if (!isAdmin) {
       return c.json(
         { success: false, error: "Insufficient permissions" },
         403
@@ -630,22 +638,43 @@ userTeams.post("/:teamId/media", async (c) => {
         return c.json({ success: false, error: "File is required" }, 400);
       }
 
-      const mimeType = file.type;
       const fileSize = file.size;
 
-      // Validate MIME type
-      if (type === "PHOTO" && !ALLOWED_PHOTO_MIMES.includes(mimeType)) {
-        return c.json({ success: false, error: "Invalid photo type. Allowed: JPEG, PNG, WebP, GIF" }, 400);
-      }
-      if (type === "VIDEO" && !ALLOWED_VIDEO_MIMES.includes(mimeType)) {
-        return c.json({ success: false, error: "Invalid video type. Allowed: MP4, WebM, QuickTime" }, 400);
-      }
-
-      // Validate file size
+      // Validate file size before reading bytes
       const maxSize = type === "PHOTO" ? PHOTO_MAX_SIZE : VIDEO_MAX_SIZE;
       if (fileSize > maxSize) {
         const maxMB = maxSize / (1024 * 1024);
         return c.json({ success: false, error: `File too large. Maximum ${maxMB}MB for ${type.toLowerCase()}s` }, 400);
+      }
+
+      // Validate magic bytes to detect actual file type
+      const arrayBuffer = await file.arrayBuffer();
+      const header = new Uint8Array(arrayBuffer.slice(0, 12));
+
+      let detectedMime: string | null = null;
+      if (header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) {
+        detectedMime = "image/jpeg";
+      } else if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47) {
+        detectedMime = "image/png";
+      } else if (
+        header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46 &&
+        header[8] === 0x57 && header[9] === 0x45 && header[10] === 0x42 && header[11] === 0x50
+      ) {
+        detectedMime = "image/webp";
+      }
+
+      if (!detectedMime) {
+        return c.json({ success: false, error: "Invalid file type" }, 400);
+      }
+
+      const mimeType = detectedMime;
+
+      // Validate detected MIME type against allowed types
+      if (type === "PHOTO" && !ALLOWED_PHOTO_MIMES.includes(mimeType)) {
+        return c.json({ success: false, error: "Invalid photo type. Allowed: JPEG, PNG, WebP" }, 400);
+      }
+      if (type === "VIDEO" && !ALLOWED_VIDEO_MIMES.includes(mimeType)) {
+        return c.json({ success: false, error: "Invalid video type. Allowed: MP4, WebM, QuickTime" }, 400);
       }
 
       // Save file to disk
@@ -653,7 +682,7 @@ userTeams.post("/:teamId/media", async (c) => {
       const filename = `${randomUUID()}${ext}`;
       await fs.promises.mkdir(UPLOADS_DIR, { recursive: true });
       const filePath = path.join(UPLOADS_DIR, filename);
-      const buffer = Buffer.from(await file.arrayBuffer());
+      const buffer = Buffer.from(arrayBuffer);
       await fs.promises.writeFile(filePath, buffer);
 
       const url = `/api/uploads/${filename}`;
@@ -680,7 +709,7 @@ userTeams.post("/:teamId/media", async (c) => {
       return c.json({ success: true, data: media });
     } else {
       // JSON URL-based flow
-      const body = await c.req.json();
+      const body = (c as any).get("sanitizedBody");
       const { type, title, url, description } = body;
 
       if (type === "LINK") {
@@ -755,7 +784,7 @@ userTeams.patch("/:teamId/media/:mediaId", async (c) => {
       return c.json({ success: false, error: "Media not found" }, 404);
     }
 
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
     const { title, url, description, sortOrder } = body;
 
     const updateData: Record<string, unknown> = {};

@@ -1,14 +1,39 @@
 import { Context, Next } from "hono";
 import { prisma } from "@ftcmetrics/db";
+import { getRedis } from "../lib/redis";
 
 /**
- * Authentication middleware that validates user ID from header
- * and attaches user info to context
+ * Extract the NextAuth session token from cookies.
+ * In production, the cookie is prefixed with __Secure-.
+ */
+function getSessionToken(c: Context): string | undefined {
+  const cookieHeader = c.req.header("Cookie");
+  if (!cookieHeader) return undefined;
+
+  // Parse cookies manually to avoid dependency
+  const cookies: Record<string, string> = {};
+  for (const pair of cookieHeader.split(";")) {
+    const [key, ...rest] = pair.split("=");
+    if (key) {
+      cookies[key.trim()] = rest.join("=").trim();
+    }
+  }
+
+  // Try production cookie name first, then dev
+  return (
+    cookies["__Secure-authjs.session-token"] ||
+    cookies["authjs.session-token"]
+  );
+}
+
+/**
+ * Authentication middleware that verifies the NextAuth session
+ * by looking up the session token in the database.
  */
 export async function authMiddleware(c: Context, next: Next) {
-  const userId = c.req.header("X-User-Id");
+  const sessionToken = getSessionToken(c);
 
-  if (!userId) {
+  if (!sessionToken) {
     return c.json(
       { success: false, error: "Authentication required" },
       401
@@ -16,26 +41,38 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   try {
-    // Validate user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
+    // Look up session in database and include user data
+    const session = await prisma.session.findUnique({
+      where: { sessionToken },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
-    if (!user) {
+    if (!session) {
       return c.json(
-        { success: false, error: "Invalid user" },
+        { success: false, error: "Invalid session" },
         401
       );
     }
 
-    // Attach user to context
-    c.set("user", user);
-    c.set("userId", userId);
+    // Check session expiry
+    if (session.expires < new Date()) {
+      return c.json(
+        { success: false, error: "Session expired" },
+        401
+      );
+    }
+
+    // Attach verified user to context
+    c.set("user", session.user);
+    c.set("userId", session.userId);
 
     await next();
   } catch (error) {
@@ -51,22 +88,26 @@ export async function authMiddleware(c: Context, next: Next) {
  * Optional auth middleware - doesn't require auth but attaches user if present
  */
 export async function optionalAuthMiddleware(c: Context, next: Next) {
-  const userId = c.req.header("X-User-Id");
+  const sessionToken = getSessionToken(c);
 
-  if (userId) {
+  if (sessionToken) {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          name: true,
-          email: true,
+      const session = await prisma.session.findUnique({
+        where: { sessionToken },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
         },
       });
 
-      if (user) {
-        c.set("user", user);
-        c.set("userId", userId);
+      if (session && session.expires > new Date()) {
+        c.set("user", session.user);
+        c.set("userId", session.userId);
       }
     } catch (error) {
       // Continue without auth on error
@@ -129,44 +170,48 @@ export function requireTeamMembership(paramName: string = "teamId") {
 }
 
 /**
- * Rate limiting middleware (simple in-memory implementation)
- * For production, use Redis-backed rate limiting
+ * Rate limiting middleware backed by Redis.
+ * Falls back to allowing requests if Redis is unavailable.
  */
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-
 export function rateLimit(
   maxRequests: number = 100,
   windowMs: number = 60000 // 1 minute
 ) {
+  const windowSeconds = Math.ceil(windowMs / 1000);
+
   return async (c: Context, next: Next) => {
-    const identifier = c.req.header("X-User-Id") || c.req.header("X-Forwarded-For") || "anonymous";
-    const now = Date.now();
-    const key = `${identifier}:${c.req.path}`;
+    const identifier =
+      c.get("userId") ||
+      c.req.header("X-Forwarded-For") ||
+      "anonymous";
+    const redisKey = `rate:${identifier}:${c.req.path}`;
 
-    const entry = rateLimitStore.get(key);
-
-    if (!entry || now > entry.resetAt) {
-      rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
-    } else if (entry.count >= maxRequests) {
-      return c.json(
-        {
-          success: false,
-          error: "Rate limit exceeded",
-          retryAfter: Math.ceil((entry.resetAt - now) / 1000),
-        },
-        429
-      );
-    } else {
-      entry.count++;
+    const redis = getRedis();
+    if (!redis) {
+      // Redis unavailable — degrade open
+      await next();
+      return;
     }
 
-    // Cleanup old entries periodically
-    if (Math.random() < 0.01) {
-      for (const [k, v] of rateLimitStore) {
-        if (now > v.resetAt) {
-          rateLimitStore.delete(k);
-        }
+    try {
+      const count = await redis.incr(redisKey);
+      if (count === 1) {
+        await redis.expire(redisKey, windowSeconds);
       }
+
+      if (count > maxRequests) {
+        const ttl = await redis.ttl(redisKey);
+        return c.json(
+          {
+            success: false,
+            error: "Rate limit exceeded",
+            retryAfter: ttl > 0 ? ttl : windowSeconds,
+          },
+          429
+        );
+      }
+    } catch {
+      // Redis error — degrade open
     }
 
     await next();
@@ -190,7 +235,7 @@ export async function sanitizeInput(c: Context, next: Next) {
       // Store sanitized body for later use
       c.set("sanitizedBody", sanitized);
     } catch {
-      // If body parsing fails, continue without sanitization
+      return c.json({ error: "Invalid JSON body" }, 400);
     }
   }
 
