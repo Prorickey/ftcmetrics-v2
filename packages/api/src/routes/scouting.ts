@@ -1,7 +1,40 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { prisma } from "@ftcmetrics/db";
 import { getFTCApi } from "../lib/ftc-api";
 import type { FTCMatchScore } from "../lib/ftc-api";
+
+const scoutingEntrySchema = z.object({
+  scoutedTeamNumber: z.number().int().positive(),
+  eventCode: z.string().regex(/^[A-Za-z0-9]+$/),
+  matchNumber: z.number().int().positive(),
+  alliance: z.enum(["RED", "BLUE"]),
+  scoutingTeamId: z.string().uuid(),
+  autoClassifiedCount: z.number().int().min(0).default(0),
+  autoOverflowCount: z.number().int().min(0).default(0),
+  autoPatternCount: z.number().int().min(0).default(0),
+  teleopClassifiedCount: z.number().int().min(0).default(0),
+  teleopOverflowCount: z.number().int().min(0).default(0),
+  teleopDepotCount: z.number().int().min(0).default(0),
+  teleopPatternCount: z.number().int().min(0).default(0),
+  teleopMotifCount: z.number().int().min(0).default(0),
+  endgameBaseStatus: z.enum(["NONE", "PARTIAL", "FULL"]).default("NONE"),
+  autoLeave: z.boolean().default(false),
+  notes: z.string().max(1000).optional(),
+  allianceNotes: z.string().max(1000).optional(),
+});
+
+const scoutingNoteSchema = z.object({
+  aboutTeamNumber: z.number().int().positive(),
+  eventCode: z.string().regex(/^[A-Za-z0-9]+$/),
+  notingTeamId: z.string().uuid(),
+  reliabilityRating: z.number().int().min(1).max(5).optional(),
+  driverSkillRating: z.number().int().min(1).max(5).optional(),
+  defenseRating: z.number().int().min(1).max(5).optional(),
+  strategyNotes: z.string().max(2000).optional(),
+  mechanicalNotes: z.string().max(2000).optional(),
+  generalNotes: z.string().max(2000).optional(),
+});
 
 const scouting = new Hono();
 
@@ -321,34 +354,34 @@ scouting.post("/entries", async (c) => {
   }
 
   try {
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
+    const parsed = scoutingEntrySchema.safeParse(body);
+
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: "Validation failed", details: parsed.error.flatten() },
+        400
+      );
+    }
+
     const {
       scoutingTeamId,
       scoutedTeamNumber,
       eventCode,
       matchNumber,
       alliance,
-      // Scoring data
-      autoLeave = false,
-      autoClassifiedCount = 0,
-      autoOverflowCount = 0,
-      autoPatternCount = 0,
-      teleopClassifiedCount = 0,
-      teleopOverflowCount = 0,
-      teleopDepotCount = 0,
-      teleopPatternCount = 0,
-      teleopMotifCount = 0,
-      endgameBaseStatus = "NONE",
+      autoLeave,
+      autoClassifiedCount,
+      autoOverflowCount,
+      autoPatternCount,
+      teleopClassifiedCount,
+      teleopOverflowCount,
+      teleopDepotCount,
+      teleopPatternCount,
+      teleopMotifCount,
+      endgameBaseStatus,
       allianceNotes,
-    } = body;
-
-    // Validate required fields
-    if (!scoutingTeamId || !scoutedTeamNumber || !eventCode || !matchNumber || !alliance) {
-      return c.json(
-        { success: false, error: "Missing required fields" },
-        400
-      );
-    }
+    } = parsed.data;
 
     // Verify user is a member of the scouting team
     const membership = await prisma.teamMember.findUnique({
@@ -462,9 +495,8 @@ scouting.post("/entries", async (c) => {
     });
   } catch (error) {
     console.error("Error creating scouting entry:", error);
-    const message = error instanceof Error ? error.message : "Failed to create scouting entry";
     return c.json(
-      { success: false, error: message },
+      { success: false, error: "An internal error occurred" },
       500
     );
   }
@@ -476,11 +508,16 @@ scouting.post("/entries", async (c) => {
  */
 scouting.get("/entries", async (c) => {
   const userId = c.req.header("X-User-Id");
+  const scoutingTeamId = c.req.query("scoutingTeamId");
+
+  // Require authentication or a scoutingTeamId filter
+  if (!userId && !scoutingTeamId) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
 
   try {
     const eventCode = c.req.query("eventCode");
     const teamNumber = c.req.query("teamNumber");
-    const scoutingTeamId = c.req.query("scoutingTeamId");
 
     const where: Record<string, unknown> = {};
 
@@ -551,7 +588,12 @@ scouting.get("/entries", async (c) => {
  * Get a specific scouting entry
  */
 scouting.get("/entries/:id", async (c) => {
+  const userId = c.req.header("X-User-Id");
   const id = c.req.param("id");
+
+  if (!userId) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
 
   try {
     const entry = await prisma.scoutingEntry.findUnique({
@@ -571,6 +613,17 @@ scouting.get("/entries/:id", async (c) => {
 
     if (!entry) {
       return c.json({ success: false, error: "Entry not found" }, 404);
+    }
+
+    // Check access: user must be a member of the scouting team, or team sharing is PUBLIC
+    if (entry.scoutingTeam.sharingLevel !== "PUBLIC") {
+      const membership = await prisma.teamMember.findFirst({
+        where: { userId, teamId: entry.scoutingTeamId },
+      });
+
+      if (!membership) {
+        return c.json({ success: false, error: "Access denied" }, 403);
+      }
     }
 
     return c.json({
@@ -622,7 +675,7 @@ scouting.patch("/entries/:id", async (c) => {
       );
     }
 
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
 
     // Merge existing values with any provided updates
     const merged = {
@@ -758,7 +811,7 @@ scouting.post("/retry-deductions", async (c) => {
   }
 
   try {
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
     const { eventCode, scoutingTeamId } = body;
 
     if (!eventCode || !scoutingTeamId) {
@@ -830,7 +883,16 @@ scouting.post("/notes", async (c) => {
   }
 
   try {
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
+    const parsed = scoutingNoteSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: "Validation failed", details: parsed.error.flatten() },
+        400
+      );
+    }
+
     const {
       notingTeamId,
       aboutTeamNumber,
@@ -841,14 +903,7 @@ scouting.post("/notes", async (c) => {
       strategyNotes,
       mechanicalNotes,
       generalNotes,
-    } = body;
-
-    if (!notingTeamId || !aboutTeamNumber) {
-      return c.json(
-        { success: false, error: "Missing required fields" },
-        400
-      );
-    }
+    } = parsed.data;
 
     // Verify user is a member of the noting team
     const membership = await prisma.teamMember.findUnique({
@@ -966,12 +1021,27 @@ scouting.post("/notes", async (c) => {
  * Get scouting notes with filters
  */
 scouting.get("/notes", async (c) => {
+  const userId = c.req.header("X-User-Id");
+
+  if (!userId) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
+
   try {
+    // Only return notes from teams the user is a member of
+    const userTeams = await prisma.teamMember.findMany({
+      where: { userId },
+      select: { teamId: true },
+    });
+    const userTeamIds = userTeams.map((t) => t.teamId);
+
     const aboutTeamNumber = c.req.query("aboutTeamNumber");
     const eventCode = c.req.query("eventCode");
     const notingTeamId = c.req.query("notingTeamId");
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      notingTeamId: { in: userTeamIds },
+    };
 
     if (aboutTeamNumber) {
       where.aboutTeam = {
@@ -983,7 +1053,11 @@ scouting.get("/notes", async (c) => {
       where.eventCode = eventCode;
     }
 
+    // If a specific notingTeamId is requested, intersect with user's teams
     if (notingTeamId) {
+      if (!userTeamIds.includes(notingTeamId)) {
+        return c.json({ success: true, data: [] });
+      }
       where.notingTeamId = notingTeamId;
     }
 
@@ -1021,14 +1095,26 @@ scouting.get("/notes", async (c) => {
  * Get aggregated scouting data for a team
  */
 scouting.get("/team-summary/:teamNumber", async (c) => {
+  const userId = c.req.header("X-User-Id");
   const teamNumber = parseInt(c.req.param("teamNumber"), 10);
   const eventCode = c.req.query("eventCode");
+
+  if (!userId) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
 
   if (isNaN(teamNumber)) {
     return c.json({ success: false, error: "Invalid team number" }, 400);
   }
 
   try {
+    // Get user's teams to filter entries
+    const userTeams = await prisma.teamMember.findMany({
+      where: { userId },
+      select: { teamId: true },
+    });
+    const userTeamIds = userTeams.map((t) => t.teamId);
+
     const team = await prisma.team.findUnique({
       where: { teamNumber },
     });
@@ -1039,6 +1125,10 @@ scouting.get("/team-summary/:teamNumber", async (c) => {
 
     const where: Record<string, unknown> = {
       scoutedTeamId: team.id,
+      OR: [
+        { scoutingTeamId: { in: userTeamIds } },
+        { scoutingTeam: { sharingLevel: "PUBLIC" } },
+      ],
     };
 
     if (eventCode) {
@@ -1061,8 +1151,10 @@ scouting.get("/team-summary/:teamNumber", async (c) => {
     }
 
     // Calculate averages
-    const avg = (arr: number[]) =>
-      arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    const avg = (arr: number[]) => {
+      const validNums = arr.filter(n => Number.isFinite(n));
+      return validNums.length > 0 ? validNums.reduce((a, b) => a + b, 0) / validNums.length : 0;
+    };
 
     const averages = {
       autoScore: avg(entries.map((e) => e.autoScore)),

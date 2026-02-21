@@ -19,7 +19,7 @@ FTC Metrics is a scouting and analytics platform for FIRST Tech Challenge (FTC) 
 | Styling | Tailwind CSS |
 | Auth | NextAuth.js (OAuth only) |
 | Package Manager | Bun |
-| Node Version | 22 LTS |
+| Node Version | 24 LTS |
 
 ## Project Structure
 

@@ -1,6 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-ftc-orange: #f57e25;
+  --color-ftc-blue: #0066b3;
+  --color-ftc-dark: #1a1a2e;
+}
 
 :root {
   --foreground: #171717;

@@ -21,7 +21,7 @@ import analytics from "./routes/analytics";
 import rankings from "./routes/rankings";
 
 // Import middleware
-import { rateLimit, sanitizeInput } from "./middleware/auth";
+import { authMiddleware, optionalAuthMiddleware, rateLimit, sanitizeInput } from "./middleware/auth";
 
 // Create the main app
 const app = new Hono();
@@ -36,13 +36,20 @@ app.use(
         "http://localhost:3000",
         process.env.CORS_ORIGIN,
       ].filter(Boolean);
-      return allowed.includes(origin) ? origin : allowed[0];
+      if (allowed.includes(origin)) return origin;
+      return "";
     },
     credentials: true,
   })
 );
 
-// Static file serving for uploads (before rate limiter)
+// Rate limiting (100 requests per minute per user/IP)
+app.use("/api/*", rateLimit(100, 60000));
+
+// Input sanitization for JSON requests
+app.use("/api/*", sanitizeInput);
+
+// Static file serving for uploads
 const UPLOADS_DIR = path.resolve(__dirname, "../uploads");
 
 const MIME_TYPES: Record<string, string> = {
@@ -81,28 +88,21 @@ app.get("/api/uploads/:filename", async (c) => {
   const contentType = MIME_TYPES[ext] || "application/octet-stream";
   const fileBuffer = await fs.promises.readFile(filePath);
 
+  const isImage = contentType.startsWith("image/");
   return new Response(fileBuffer, {
     headers: {
       "Content-Type": contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": isImage ? "inline" : "attachment",
+      "Content-Security-Policy": "default-src 'none'",
     },
   });
 });
 
-// Rate limiting (100 requests per minute per user/IP)
-app.use("/api/*", rateLimit(100, 60000));
-
-// Input sanitization for JSON requests
-app.use("/api/*", sanitizeInput);
-
 // Health check
 app.get("/", (c) => {
-  return c.json({
-    name: "FTC Metrics API",
-    version: "0.0.1",
-    status: "ok",
-    season: "DECODE 2025-2026",
-  });
+  return c.json({ status: "ok" });
 });
 
 app.get("/api/health", async (c) => {
@@ -130,12 +130,22 @@ app.get("/api/health", async (c) => {
   return c.json(
     {
       status: isHealthy ? (isDegraded ? "degraded" : "healthy") : "unhealthy",
-      timestamp: new Date().toISOString(),
-      checks,
+      database: checks.database,
+      redis: checks.redis,
     },
     isHealthy ? 200 : 503
   );
 });
+
+// Auth middleware: require session for protected routes
+app.use("/api/user-teams/*", authMiddleware);
+app.use("/api/scouting/*", authMiddleware);
+
+// Optional auth for public routes (attaches user if session present)
+app.use("/api/events/*", optionalAuthMiddleware);
+app.use("/api/teams/*", optionalAuthMiddleware);
+app.use("/api/analytics/*", optionalAuthMiddleware);
+app.use("/api/rankings/*", optionalAuthMiddleware);
 
 // Mount routes
 app.route("/api/events", events);

@@ -408,7 +408,7 @@ async function getEPAFromOtherEvents(
  */
 analytics.post("/predict", async (c) => {
   try {
-    const body = await c.req.json();
+    const body = (c as any).get("sanitizedBody");
     const { eventCode, redTeam1, redTeam2, blueTeam1, blueTeam2 } = body;
 
     if (!eventCode || !redTeam1 || !redTeam2 || !blueTeam1 || !blueTeam2) {

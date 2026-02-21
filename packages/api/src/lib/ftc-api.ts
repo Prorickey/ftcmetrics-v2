@@ -128,6 +128,8 @@ export interface FTCRankings {
   }[];
 }
 
+const VALID_EVENT_CODE = /^[A-Za-z0-9]+$/;
+
 class FTCEventsAPI {
   private username: string;
   private token: string;
@@ -230,6 +232,7 @@ class FTCEventsAPI {
    * Get a specific event by code
    */
   async getEvent(eventCode: string): Promise<{ events: FTCEvent[] }> {
+    if (!VALID_EVENT_CODE.test(eventCode)) throw new Error("Invalid event code");
     return this.fetch<{ events: FTCEvent[] }>(`/events?eventCode=${eventCode}`);
   }
 
@@ -237,6 +240,7 @@ class FTCEventsAPI {
    * Get teams at an event
    */
   async getEventTeams(eventCode: string): Promise<{ teams: FTCTeam[] }> {
+    if (!VALID_EVENT_CODE.test(eventCode)) throw new Error("Invalid event code");
     return this.fetch<{ teams: FTCTeam[] }>(`/teams?eventCode=${eventCode}`);
   }
 
@@ -254,6 +258,7 @@ class FTCEventsAPI {
     eventCode: string,
     tournamentLevel: "qual" | "playoff" = "qual"
   ): Promise<{ schedule: FTCMatch[] }> {
+    if (!VALID_EVENT_CODE.test(eventCode)) throw new Error("Invalid event code");
     return this.fetch<{ schedule: FTCMatch[] }>(
       `/schedule/${eventCode}?tournamentLevel=${tournamentLevel}`
     );
@@ -266,6 +271,7 @@ class FTCEventsAPI {
     eventCode: string,
     tournamentLevel: "qual" | "playoff" = "qual"
   ): Promise<{ matches: FTCMatch[] }> {
+    if (!VALID_EVENT_CODE.test(eventCode)) throw new Error("Invalid event code");
     return this.fetch<{ matches: FTCMatch[] }>(
       `/matches/${eventCode}?tournamentLevel=${tournamentLevel}`
     );
@@ -278,6 +284,7 @@ class FTCEventsAPI {
     eventCode: string,
     tournamentLevel: "qual" | "playoff" = "qual"
   ): Promise<{ matchScores: FTCMatchScore[] }> {
+    if (!VALID_EVENT_CODE.test(eventCode)) throw new Error("Invalid event code");
     return this.fetch<{ matchScores: FTCMatchScore[] }>(
       `/scores/${eventCode}/${tournamentLevel}`
     );
@@ -287,6 +294,7 @@ class FTCEventsAPI {
    * Get team rankings at an event
    */
   async getRankings(eventCode: string): Promise<FTCRankings> {
+    if (!VALID_EVENT_CODE.test(eventCode)) throw new Error("Invalid event code");
     return this.fetch<FTCRankings>(`/rankings/${eventCode}`);
   }
 

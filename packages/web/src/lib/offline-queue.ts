@@ -28,6 +28,62 @@ interface QueuedEntry {
     endgameBaseStatus?: "NONE" | "PARTIAL" | "FULL";
   };
   timestamp: number;
+  _signature?: string;
+}
+
+/**
+ * Per-session HMAC key for signing queued entries.
+ * Resets on page reload — entries from previous sessions will fail verification
+ * and must be re-submitted.
+ */
+let sessionKey: CryptoKey | null = null;
+
+async function getSessionKey(): Promise<CryptoKey> {
+  if (!sessionKey) {
+    sessionKey = await crypto.subtle.generateKey(
+      { name: "HMAC", hash: "SHA-256" },
+      true,
+      ["sign", "verify"]
+    );
+  }
+  return sessionKey;
+}
+
+function arrayBufferToHex(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function hexToArrayBuffer(hex: string): ArrayBuffer {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes.buffer;
+}
+
+/**
+ * Compute HMAC-SHA256 signature for an entry (excluding the _signature field).
+ */
+async function signEntry(entry: QueuedEntry): Promise<string> {
+  const key = await getSessionKey();
+  const { _signature, ...entryData } = entry;
+  const encoded = new TextEncoder().encode(JSON.stringify(entryData));
+  const sig = await crypto.subtle.sign("HMAC", key, encoded);
+  return arrayBufferToHex(sig);
+}
+
+/**
+ * Verify the HMAC-SHA256 signature of an entry.
+ */
+async function verifyEntry(entry: QueuedEntry): Promise<boolean> {
+  if (!entry._signature) return false;
+  const key = await getSessionKey();
+  const { _signature, ...entryData } = entry;
+  const encoded = new TextEncoder().encode(JSON.stringify(entryData));
+  const sigBuffer = hexToArrayBuffer(_signature);
+  return crypto.subtle.verify("HMAC", key, sigBuffer, encoded);
 }
 
 /**
@@ -73,6 +129,8 @@ export async function queueScoutingEntry(
     data,
     timestamp: Date.now(),
   };
+
+  entry._signature = await signEntry(entry);
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], "readwrite");
@@ -173,6 +231,17 @@ export async function syncPendingEntries(
   const errors: string[] = [];
 
   for (const entry of entries) {
+    // Verify HMAC signature before syncing
+    const valid = await verifyEntry(entry);
+    if (!valid) {
+      console.warn(
+        `[offline-queue] Skipping entry ${entry.id}: HMAC signature verification failed (possible tampering or session mismatch)`
+      );
+      failed++;
+      errors.push(`Match ${entry.data.matchNumber}: signature verification failed`);
+      continue;
+    }
+
     try {
       const response = await fetch(`${apiUrl}/api/scouting/entries`, {
         method: "POST",

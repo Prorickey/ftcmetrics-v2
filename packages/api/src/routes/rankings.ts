@@ -5,14 +5,15 @@ import {
   getEPARankings,
   type MatchForEPA,
 } from "../lib/stats/epa";
+import { getRedis } from "../lib/redis";
 
 const rankings = new Hono();
 
 const CURRENT_SEASON = 2025;
 
-// In-memory cache for global EPA rankings
-let rankingsCache: { data: RankingsResponse; timestamp: number } | null = null;
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+// Redis cache key and TTL for global EPA rankings
+const RANKINGS_CACHE_KEY = "ftcmetrics:rankings:epa";
+const RANKINGS_CACHE_TTL = 30 * 60; // 30 minutes in seconds
 
 interface RankingsResponse {
   success: true;
@@ -213,9 +214,17 @@ async function fetchEventMatches(
  * This is an expensive operation. Results are cached in memory for 30 minutes.
  */
 rankings.get("/epa", async (c) => {
-  // Return cached result if still fresh
-  if (rankingsCache && Date.now() - rankingsCache.timestamp < CACHE_TTL) {
-    return c.json(rankingsCache.data);
+  // Return cached result from Redis if available
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const cached = await redis.get(RANKINGS_CACHE_KEY);
+      if (cached) {
+        return c.json(JSON.parse(cached) as RankingsResponse);
+      }
+    } catch {
+      // Redis read failed, proceed with fresh computation
+    }
   }
 
   try {
@@ -274,7 +283,9 @@ rankings.get("/epa", async (c) => {
           rankings: [],
         },
       };
-      rankingsCache = { data: emptyResponse, timestamp: Date.now() };
+      if (redis) {
+        try { await redis.setex(RANKINGS_CACHE_KEY, RANKINGS_CACHE_TTL, JSON.stringify(emptyResponse)); } catch {}
+      }
       return c.json(emptyResponse);
     }
 
@@ -309,8 +320,10 @@ rankings.get("/epa", async (c) => {
       },
     };
 
-    // Cache the result
-    rankingsCache = { data: response, timestamp: Date.now() };
+    // Cache the result in Redis
+    if (redis) {
+      try { await redis.setex(RANKINGS_CACHE_KEY, RANKINGS_CACHE_TTL, JSON.stringify(response)); } catch {}
+    }
 
     console.log(
       `[Rankings] Global EPA rankings computed: ${rankedResults.length} teams from ${allMatches.length} matches`

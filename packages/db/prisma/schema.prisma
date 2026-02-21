@@ -130,6 +130,8 @@ model TeamInvite {
   teamId    String   @map("team_id")
   code      String   @unique
   createdBy String   @map("created_by")
+  maxUses   Int?
+  uses      Int      @default(0)
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -232,7 +234,7 @@ model ScoutingEntry {
   id        String   @id @default(cuid())
 
   // Who scouted and who was scouted
-  scouterId     String  @map("scouter_id")
+  scouterId     String?  @map("scouter_id")
   scoutingTeamId String @map("scouting_team_id")
   scoutedTeamId String  @map("scouted_team_id")
 
@@ -282,7 +284,7 @@ model ScoutingEntry {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  scouter      User   @relation(fields: [scouterId], references: [id], onDelete: Cascade)
+  scouter      User?  @relation(fields: [scouterId], references: [id], onDelete: SetNull)
   scoutingTeam Team   @relation("ScoutingTeam", fields: [scoutingTeamId], references: [id], onDelete: Cascade)
   scoutedTeam  Team   @relation("ScoutedTeam", fields: [scoutedTeamId], references: [id], onDelete: Cascade)
   event        Event  @relation(fields: [eventCode], references: [eventCode], onDelete: Cascade)
@@ -294,6 +296,7 @@ model ScoutingEntry {
   @@index([scoutingTeamId])
   @@index([scouterId])
   @@index([eventCode, scoutedTeamId])
+  @@unique([scouterId, eventCode, matchNumber, scoutedTeamId])
   @@index([createdAt])
   @@map("scouting_entries")
 }
@@ -312,7 +315,7 @@ model ScoutingNote {
   id String @id @default(cuid())
 
   // Who noted and about whom
-  authorId       String @map("author_id")
+  authorId       String? @map("author_id")
   notingTeamId   String @map("noting_team_id")
   aboutTeamId    String @map("about_team_id")
 
@@ -334,7 +337,7 @@ model ScoutingNote {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  author     User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author     User?  @relation(fields: [authorId], references: [id], onDelete: SetNull)
   notingTeam Team   @relation("NotingTeam", fields: [notingTeamId], references: [id], onDelete: Cascade)
   aboutTeam  Team   @relation("NotedTeam", fields: [aboutTeamId], references: [id], onDelete: Cascade)
   event      Event? @relation(fields: [eventCode], references: [eventCode], onDelete: SetNull)
@@ -343,6 +346,7 @@ model ScoutingNote {
   @@index([aboutTeamId])
   @@index([notingTeamId])
   @@index([eventCode])
+  @@unique([authorId, aboutTeamId, notingTeamId, eventCode])
   @@index([createdAt])
   @@map("scouting_notes")
 }

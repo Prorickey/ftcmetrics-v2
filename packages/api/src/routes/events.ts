@@ -4,6 +4,8 @@ import { getFTCApi } from "../lib/ftc-api";
 
 const events = new Hono();
 
+const VALID_EVENT_CODE = /^[A-Za-z0-9]+$/;
+
 /**
  * GET /api/events
  * Get all events for the current season
@@ -35,6 +37,9 @@ events.get("/", async (c) => {
  */
 events.get("/:eventCode", async (c) => {
   const eventCode = c.req.param("eventCode");
+  if (!VALID_EVENT_CODE.test(eventCode)) {
+    return c.json({ success: false, error: "Invalid event code" }, 400);
+  }
 
   try {
     const api = getFTCApi();
@@ -72,6 +77,9 @@ events.get("/:eventCode", async (c) => {
  */
 events.get("/:eventCode/teams", async (c) => {
   const eventCode = c.req.param("eventCode");
+  if (!VALID_EVENT_CODE.test(eventCode)) {
+    return c.json({ success: false, error: "Invalid event code" }, 400);
+  }
 
   try {
     const api = getFTCApi();
@@ -128,6 +136,9 @@ events.get("/:eventCode/teams", async (c) => {
  */
 events.get("/:eventCode/schedule", async (c) => {
   const eventCode = c.req.param("eventCode");
+  if (!VALID_EVENT_CODE.test(eventCode)) {
+    return c.json({ success: false, error: "Invalid event code" }, 400);
+  }
   const level = c.req.query("level") === "playoff" ? "playoff" : "qual";
 
   try {
@@ -156,6 +167,9 @@ events.get("/:eventCode/schedule", async (c) => {
  */
 events.get("/:eventCode/matches", async (c) => {
   const eventCode = c.req.param("eventCode");
+  if (!VALID_EVENT_CODE.test(eventCode)) {
+    return c.json({ success: false, error: "Invalid event code" }, 400);
+  }
   const level = c.req.query("level") === "playoff" ? "playoff" : "qual";
 
   try {
@@ -184,6 +198,9 @@ events.get("/:eventCode/matches", async (c) => {
  */
 events.get("/:eventCode/scores", async (c) => {
   const eventCode = c.req.param("eventCode");
+  if (!VALID_EVENT_CODE.test(eventCode)) {
+    return c.json({ success: false, error: "Invalid event code" }, 400);
+  }
   const level = c.req.query("level") === "playoff" ? "playoff" : "qual";
 
   try {
@@ -212,6 +229,9 @@ events.get("/:eventCode/scores", async (c) => {
  */
 events.get("/:eventCode/rankings", async (c) => {
   const eventCode = c.req.param("eventCode");
+  if (!VALID_EVENT_CODE.test(eventCode)) {
+    return c.json({ success: false, error: "Invalid event code" }, 400);
+  }
 
   try {
     const api = getFTCApi();

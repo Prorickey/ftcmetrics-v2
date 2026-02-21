@@ -15,10 +15,10 @@
     "db:studio": "bun run --filter @ftcmetrics/db studio"
   },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "typescript": "^5.9.3"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "dependencies": {
     "ml-matrix": "^6.12.1"
