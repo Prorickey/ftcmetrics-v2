@@ -7,7 +7,7 @@ const scoutingEntrySchema = z.object({
   eventCode: z.string().regex(/^[A-Za-z0-9]+$/),
   matchNumber: z.number().int().positive(),
   alliance: z.enum(["RED", "BLUE"]),
-  scoutingTeamId: z.string().uuid(),
+  scoutingTeamId: z.string().min(1),
   autoClassifiedCount: z.number().int().min(0).default(0),
   autoOverflowCount: z.number().int().min(0).default(0),
   autoPatternCount: z.number().int().min(0).default(0),
@@ -22,7 +22,7 @@ const scoutingEntrySchema = z.object({
   allianceNotes: z.string().max(1000).optional(),
 });
 
-const VALID_TEAM_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+const VALID_TEAM_ID = "clx2abc123def456ghi789";
 
 function validPayload(overrides: Record<string, unknown> = {}) {
   return {
@@ -125,9 +125,9 @@ describe("Scouting entry schema validation", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects invalid UUID for scoutingTeamId", () => {
+  it("rejects empty string for scoutingTeamId", () => {
     const result = scoutingEntrySchema.safeParse(
-      validPayload({ scoutingTeamId: "not-a-uuid" })
+      validPayload({ scoutingTeamId: "" })
     );
     expect(result.success).toBe(false);
   });

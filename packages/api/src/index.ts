@@ -19,6 +19,7 @@ import userTeams from "./routes/user-teams";
 import scouting from "./routes/scouting";
 import analytics from "./routes/analytics";
 import rankings from "./routes/rankings";
+import { computeAndCacheRankings } from "./routes/rankings";
 
 // Import middleware
 import { authMiddleware, optionalAuthMiddleware, rateLimit, sanitizeInput } from "./middleware/auth";
@@ -164,3 +165,13 @@ serve({
   fetch: app.fetch,
   port,
 });
+
+// Pre-compute rankings on startup and refresh every 30 minutes
+computeAndCacheRankings().catch((err) =>
+  console.error("[Rankings] Startup computation failed:", err)
+);
+setInterval(() => {
+  computeAndCacheRankings().catch((err) =>
+    console.error("[Rankings] Periodic computation failed:", err)
+  );
+}, 30 * 60 * 1000);

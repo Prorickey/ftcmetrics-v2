@@ -23,8 +23,8 @@ COPY --from=builder /app/packages/db ./packages/db
 COPY --from=builder /app/packages/shared ./packages/shared
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/tsconfig.base.json ./
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 appuser
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 --gid nodejs appuser
 RUN mkdir -p packages/api/uploads && chown appuser:nodejs packages/api/uploads
 EXPOSE 3001
 ENV PORT=3001

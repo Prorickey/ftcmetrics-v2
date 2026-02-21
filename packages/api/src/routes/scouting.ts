@@ -9,7 +9,7 @@ const scoutingEntrySchema = z.object({
   eventCode: z.string().regex(/^[A-Za-z0-9]+$/),
   matchNumber: z.number().int().positive(),
   alliance: z.enum(["RED", "BLUE"]),
-  scoutingTeamId: z.string().uuid(),
+  scoutingTeamId: z.string().min(1),
   autoClassifiedCount: z.number().int().min(0).default(0),
   autoOverflowCount: z.number().int().min(0).default(0),
   autoPatternCount: z.number().int().min(0).default(0),
@@ -27,7 +27,7 @@ const scoutingEntrySchema = z.object({
 const scoutingNoteSchema = z.object({
   aboutTeamNumber: z.number().int().positive(),
   eventCode: z.string().regex(/^[A-Za-z0-9]+$/),
-  notingTeamId: z.string().uuid(),
+  notingTeamId: z.string().min(1),
   reliabilityRating: z.number().int().min(1).max(5).optional(),
   driverSkillRating: z.number().int().min(1).max(5).optional(),
   defenseRating: z.number().int().min(1).max(5).optional(),
@@ -254,10 +254,8 @@ async function performAllianceDeduction(entryId: string): Promise<{
     });
 
     if (existingPartnerEntry) {
-      return {
-        success: false,
-        error: "Scouting entry already exists for partner team in this match",
-      };
+      // Partner entry already exists — treat as success so callers don't surface a spurious error
+      return { success: true, data: existingPartnerEntry };
     }
   }
 
@@ -564,10 +562,8 @@ scouting.get("/entries", async (c) => {
           },
         },
       },
-      orderBy: [
-        { eventCode: "asc" },
-        { matchNumber: "asc" },
-      ],
+      orderBy: { createdAt: "desc" },
+      take: 50,
     });
 
     return c.json({
@@ -842,17 +838,12 @@ scouting.post("/retry-deductions", async (c) => {
     });
 
     let deducted = 0;
-    let skipped = 0;
     let failed = 0;
 
     for (const entry of entries) {
       const result = await performAllianceDeduction(entry.id);
       if (result.success) {
         deducted++;
-      } else if (
-        result.error === "Scouting entry already exists for partner team in this match"
-      ) {
-        skipped++;
       } else {
         failed++;
       }
@@ -860,7 +851,7 @@ scouting.post("/retry-deductions", async (c) => {
 
     return c.json({
       success: true,
-      data: { deducted, skipped, failed, total: entries.length },
+      data: { deducted, failed, total: entries.length },
     });
   } catch (error) {
     console.error("Error retrying deductions:", error);
@@ -1075,6 +1066,7 @@ scouting.get("/notes", async (c) => {
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 50,
     });
 
     return c.json({

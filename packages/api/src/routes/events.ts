@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { prisma } from "@ftcmetrics/db";
 import { getFTCApi } from "../lib/ftc-api";
+import { getRedis } from "../lib/redis";
 
 const events = new Hono();
 
@@ -81,9 +82,33 @@ events.get("/:eventCode/teams", async (c) => {
     return c.json({ success: false, error: "Invalid event code" }, 400);
   }
 
+  const cacheKey = `ftcmetrics:event-teams:${eventCode}`;
+
+  // Try Redis cache first
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return c.json(JSON.parse(cached));
+      }
+    } catch {
+      // Redis read failed, fall through to FTC API
+    }
+  }
+
   try {
     const api = getFTCApi();
     const { teams } = await api.getEventTeams(eventCode);
+
+    // Store response in Redis with 1-hour TTL (fire-and-forget)
+    if (redis) {
+      try {
+        await redis.setex(cacheKey, 3600, JSON.stringify({ success: true, data: teams }));
+      } catch {
+        // Redis write failed, continue without caching
+      }
+    }
 
     // Cache teams in FtcTeam table (fire-and-forget)
     Promise.all(

@@ -113,7 +113,7 @@ export function RecentActivity() {
                 teamEntries.forEach((e) => eventCodes.add(e.eventCode));
               }
             }),
-            scoutingApi.getNotes({ notingTeamId: teamId }).then((result) => {
+            scoutingApi.getNotes(session.user!.id, { notingTeamId: teamId }).then((result) => {
               if (result.success && result.data) {
                 allNotes.push(...(result.data as ScoutingNote[]));
               }

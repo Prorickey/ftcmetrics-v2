@@ -366,7 +366,7 @@ export const scoutingApi = {
     });
   },
 
-  getNotes: async (filters?: {
+  getNotes: async (userId: string, filters?: {
     aboutTeamNumber?: number;
     eventCode?: string;
     notingTeamId?: string;
@@ -377,7 +377,9 @@ export const scoutingApi = {
     if (filters?.eventCode) params.set("eventCode", filters.eventCode);
     if (filters?.notingTeamId) params.set("notingTeamId", filters.notingTeamId);
 
-    return fetchApi(`/api/scouting/notes?${params.toString()}`);
+    return fetchApi(`/api/scouting/notes?${params.toString()}`, {
+      headers: { "X-User-Id": userId },
+    });
   },
 
   getTeamStats: async (userId: string, teamId: string) => {
@@ -530,7 +532,12 @@ export const ftcTeamsApi = {
 
 // Rankings API (global season-wide)
 export const rankingsApi = {
-  getGlobalEPA: async () => {
+  getGlobalEPA: async (params?: { scope?: string; country?: string; state?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.scope) searchParams.set("scope", params.scope);
+    if (params?.country) searchParams.set("country", params.country);
+    if (params?.state) searchParams.set("state", params.state);
+    const qs = searchParams.toString();
     return fetchApi<{
       season: number;
       totalTeams: number;
@@ -547,7 +554,57 @@ export const rankingsApi = {
         matchCount: number;
         trend: "up" | "down" | "stable";
       }>;
-    }>("/api/rankings/epa");
+    }>(`/api/rankings/epa${qs ? `?${qs}` : ""}`);
+  },
+
+  getFilters: async () => {
+    return fetchApi<{
+      countries: string[];
+      states: Record<string, string[]>;
+    }>("/api/rankings/filters");
+  },
+
+  getTeamRankings: async (teamNumber: number) => {
+    return fetchApi<{
+      worldRank: number;
+      worldTotal: number;
+      countryRank: number | null;
+      countryTotal: number | null;
+      country: string | null;
+      stateRank: number | null;
+      stateTotal: number | null;
+      stateProv: string | null;
+      epa: number;
+      autoEpa: number;
+      teleopEpa: number;
+      endgameEpa: number;
+      autoWorldRank: number | null;
+      teleopWorldRank: number | null;
+      endgameWorldRank: number | null;
+      autoCountryRank: number | null;
+      teleopCountryRank: number | null;
+      endgameCountryRank: number | null;
+      autoStateRank: number | null;
+      teleopStateRank: number | null;
+      endgameStateRank: number | null;
+      opr: number | null;
+      autoOpr: number | null;
+      teleopOpr: number | null;
+      endgameOpr: number | null;
+      oprWorldRank: number | null;
+      oprWorldTotal: number | null;
+      oprCountryRank: number | null;
+      oprStateRank: number | null;
+      autoOprWorldRank: number | null;
+      teleopOprWorldRank: number | null;
+      endgameOprWorldRank: number | null;
+      autoOprCountryRank: number | null;
+      teleopOprCountryRank: number | null;
+      endgameOprCountryRank: number | null;
+      autoOprStateRank: number | null;
+      teleopOprStateRank: number | null;
+      endgameOprStateRank: number | null;
+    }>(`/api/rankings/team/${teamNumber}`);
   },
 };
 

@@ -27,6 +27,7 @@ export const mockPrisma = {
   ftcTeam: {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
+    findMany: vi.fn(),
     upsert: vi.fn(),
   },
   invite: {
