@@ -728,10 +728,12 @@ function TeamEventAnalyticsContent() {
           analyticsApi.getTeamAnalytics(teamNumber, eventCode),
           scoutingApi.getTeamSummary(teamNumber, eventCode),
           analyticsApi.getTeamMatches(teamNumber, eventCode),
-          scoutingApi.getNotes({
-            aboutTeamNumber: teamNumber,
-            eventCode,
-          }),
+          session?.user?.id
+            ? scoutingApi.getNotes(session.user.id, {
+                aboutTeamNumber: teamNumber,
+                eventCode,
+              })
+            : Promise.resolve({ success: true, data: [] }),
         ]);
 
         if (teamResult.success && teamResult.data) {
@@ -760,7 +762,7 @@ function TeamEventAnalyticsContent() {
       }
     }
     fetchData();
-  }, [teamNumber, eventCode]);
+  }, [teamNumber, eventCode, session?.user?.id]);
 
   // Fetch scouting entries when session is available
   useEffect(() => {

@@ -159,9 +159,10 @@ function NotesContent() {
     if (!selectedTeam) return;
 
     async function fetchNotes() {
+      if (!session?.user?.id) return;
       setNotesLoading(true);
       try {
-        const result = await scoutingApi.getNotes({
+        const result = await scoutingApi.getNotes(session.user.id, {
           notingTeamId: selectedTeam,
           eventCode: selectedEvent || undefined,
         });
@@ -218,7 +219,7 @@ function NotesContent() {
           generalNotes: "",
         }));
         // Refresh notes
-        const notesResult = await scoutingApi.getNotes({
+        const notesResult = await scoutingApi.getNotes(session.user!.id, {
           notingTeamId: selectedTeam,
           eventCode: selectedEvent || undefined,
         });

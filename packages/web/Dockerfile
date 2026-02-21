@@ -14,6 +14,8 @@ COPY . .
 RUN bun install
 RUN cd packages/db && bunx prisma generate
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
+ENV NEXTAUTH_SECRET="build-placeholder-secret"
+ENV NEXTAUTH_URL="http://localhost:3000"
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN cd packages/web && bun run build

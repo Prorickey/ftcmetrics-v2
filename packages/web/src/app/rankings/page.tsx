@@ -50,7 +50,147 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString();
 }
 
+interface FiltersData {
+  countries: string[];
+  states: Record<string, string[]>;
+}
+
+type Scope = "global" | "country" | "state";
+
 const LOAD_INCREMENT = 100;
+
+const COUNTRY_DISPLAY_NAMES: Record<string, string> = {
+  USA: "United States",
+  UK: "United Kingdom",
+};
+
+function displayName(value: string, displayMap?: Record<string, string>) {
+  return displayMap?.[value] ?? value;
+}
+
+function SearchableDropdown({
+  options,
+  value,
+  onSelect,
+  placeholder,
+  allLabel,
+  displayMap,
+}: {
+  options: string[];
+  value: string;
+  onSelect: (v: string) => void;
+  placeholder: string;
+  allLabel?: string;
+  displayMap?: Record<string, string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch("");
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [open]);
+
+  const filtered = options.filter((opt) => {
+    if (!search) return true;
+    const s = search.toLowerCase();
+    const label = displayMap?.[opt] ?? opt;
+    return opt.toLowerCase().includes(s) || label.toLowerCase().includes(s);
+  });
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full min-w-[160px] px-3 py-1.5 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-left flex items-center justify-between gap-2"
+      >
+        <span className={value ? "" : "text-gray-500 dark:text-gray-400"}>
+          {value ? (displayMap?.[value] ?? value) : placeholder}
+        </span>
+        <svg
+          className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${open ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full min-w-[200px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+          <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+            <div className="relative">
+              <svg
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                ref={inputRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Search...`}
+                className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-ftc-orange"
+              />
+            </div>
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {allLabel && (
+              <button
+                type="button"
+                onClick={() => { onSelect(""); setOpen(false); setSearch(""); }}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                  !value ? "text-ftc-orange font-medium" : ""
+                }`}
+              >
+                {allLabel}
+              </button>
+            )}
+            {filtered.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => { onSelect(opt); setOpen(false); setSearch(""); }}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                  value === opt ? "text-ftc-orange font-medium" : ""
+                }`}
+              >
+                {displayMap?.[opt] ?? opt}
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <p className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400 text-center">
+                No results found
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function GlobalRankingsContent() {
   const [data, setData] = useState<RankingsData | null>(null);
@@ -59,12 +199,46 @@ function GlobalRankingsContent() {
   const [teamFilter, setTeamFilter] = useState("");
   const [visibleCount, setVisibleCount] = useState(LOAD_INCREMENT);
 
+  // Filter state
+  const [scope, setScope] = useState<Scope>("global");
+  const [selectedCountry, setSelectedCountry] = useState("");
+  const [selectedState, setSelectedState] = useState("");
+  const [filters, setFilters] = useState<FiltersData | null>(null);
+  const [filtersLoading, setFiltersLoading] = useState(false);
+
+  // Fetch filter options on mount
+  useEffect(() => {
+    async function loadFilters() {
+      setFiltersLoading(true);
+      try {
+        const result = await rankingsApi.getFilters();
+        if (result.success && result.data) {
+          setFilters(result.data);
+        }
+      } catch {
+        // Filters are optional, don't block the page
+      } finally {
+        setFiltersLoading(false);
+      }
+    }
+    loadFilters();
+  }, []);
+
+  // Fetch rankings whenever scope/country/state changes
   useEffect(() => {
     async function fetchRankings() {
       setLoading(true);
       setError(null);
       try {
-        const result = await rankingsApi.getGlobalEPA();
+        const params: { scope?: string; country?: string; state?: string } = {};
+        if (scope !== "global") {
+          params.scope = scope;
+          if (selectedCountry) params.country = selectedCountry;
+          if (scope === "state" && selectedState) params.state = selectedState;
+        }
+        const result = await rankingsApi.getGlobalEPA(
+          scope === "global" ? undefined : params
+        );
         if (result.success && result.data) {
           setData(result.data);
         } else {
@@ -77,8 +251,13 @@ function GlobalRankingsContent() {
         setLoading(false);
       }
     }
+
+    // Don't fetch if country scope but no country selected, or state scope but missing params
+    if (scope === "country" && !selectedCountry) return;
+    if (scope === "state" && (!selectedCountry || !selectedState)) return;
+
     fetchRankings();
-  }, []);
+  }, [scope, selectedCountry, selectedState]);
 
   const matchedTeamNumbers = useMemo(() => {
     if (!data || !teamFilter.trim()) return new Set<number>();
@@ -114,7 +293,7 @@ function GlobalRankingsContent() {
   // Reset visible count when filter changes
   useEffect(() => {
     setVisibleCount(LOAD_INCREMENT);
-  }, [teamFilter]);
+  }, [teamFilter, scope, selectedCountry, selectedState]);
 
   // Infinite scroll: auto-load when sentinel enters viewport
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -203,10 +382,74 @@ function GlobalRankingsContent() {
     <div>
       {/* Page Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold">Global Rankings</h1>
+        <h1 className="text-2xl font-bold">
+          {scope === "global" && "Global Rankings"}
+          {scope === "country" && selectedCountry && `Rankings for ${selectedCountry}`}
+          {scope === "state" && selectedState && selectedCountry && `Rankings for ${selectedState}, ${selectedCountry}`}
+          {scope !== "global" && !selectedCountry && "Rankings"}
+        </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
           Season-wide EPA rankings for DECODE 2025-2026
         </p>
+      </div>
+
+      {/* Scope Filter Controls */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 mb-6">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Scope pills */}
+          <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            {(["global", "country", "state"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => {
+                  setScope(s);
+                  if (s === "global") {
+                    setSelectedCountry("");
+                    setSelectedState("");
+                  }
+                  if (s === "country") {
+                    setSelectedState("");
+                  }
+                }}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  scope === s
+                    ? "bg-ftc-orange text-white"
+                    : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                }`}
+              >
+                {s === "global" ? "Global" : s === "country" ? "Country" : "State"}
+              </button>
+            ))}
+          </div>
+
+          {/* Country dropdown */}
+          {scope !== "global" && filters && (
+            <SearchableDropdown
+              options={filters.countries}
+              value={selectedCountry}
+              onSelect={(v) => {
+                setSelectedCountry(v);
+                setSelectedState("");
+              }}
+              placeholder="Select country..."
+              displayMap={COUNTRY_DISPLAY_NAMES}
+            />
+          )}
+
+          {/* State dropdown */}
+          {scope === "state" && selectedCountry && filters?.states[selectedCountry] && (
+            <SearchableDropdown
+              options={filters.states[selectedCountry]}
+              value={selectedState}
+              onSelect={setSelectedState}
+              placeholder="Select state/region..."
+            />
+          )}
+
+          {filtersLoading && scope !== "global" && (
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-ftc-orange border-t-transparent" />
+          )}
+        </div>
       </div>
 
       {/* Stats Summary Cards */}

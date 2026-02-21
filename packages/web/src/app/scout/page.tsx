@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
 import { teamsApi, eventsApi, scoutingApi } from "@/lib/api";
 
@@ -550,15 +550,19 @@ function ScoutContent() {
   }, []);
 
   // Fetch scouting entries and notes for the selected team
+  const hasLoadedOnce = useRef(false);
   const fetchEntries = useCallback(async () => {
     if (!session?.user?.id || !selectedTeam) return;
-    setEntriesLoading(true);
+    // Only show loading skeleton on initial load, not on refetches
+    if (!hasLoadedOnce.current) {
+      setEntriesLoading(true);
+    }
     try {
       const [entriesResult, notesResult] = await Promise.all([
         scoutingApi.getEntries(session.user.id, {
           scoutingTeamId: selectedTeam,
         }),
-        scoutingApi.getNotes({ notingTeamId: selectedTeam }),
+        scoutingApi.getNotes(session.user!.id, { notingTeamId: selectedTeam }),
       ]);
       if (entriesResult.success && entriesResult.data) {
         setEntries(entriesResult.data as ScoutingEntry[]);
@@ -570,8 +574,14 @@ function ScoutContent() {
       console.error("Failed to fetch entries:", err);
     } finally {
       setEntriesLoading(false);
+      hasLoadedOnce.current = true;
     }
   }, [session?.user?.id, selectedTeam]);
+
+  // Reset loading flag when team changes so new team gets skeleton
+  useEffect(() => {
+    hasLoadedOnce.current = false;
+  }, [selectedTeam]);
 
   useEffect(() => {
     fetchEntries();
@@ -1108,6 +1118,31 @@ function ScoutContent() {
                         {/* Scouter info */}
                         <div className="text-xs text-gray-400 dark:text-gray-500">
                           Scouted by {entry.scouter.name}
+                        </div>
+
+                        {/* Deduct Partner action — also shown here for easy access on small screens */}
+                        <div className="flex items-center gap-3 pt-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeductPartner(entry.id);
+                            }}
+                            disabled={deductingId === entry.id}
+                            className="px-3 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {deductingId === entry.id ? "Deducting..." : "Deduct Partner"}
+                          </button>
+                          {deductMessage?.id === entry.id && (
+                            <span
+                              className={`text-xs ${
+                                deductMessage.type === "success"
+                                  ? "text-green-600 dark:text-green-400"
+                                  : "text-red-500 dark:text-red-400"
+                              }`}
+                            >
+                              {deductMessage.text}
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}

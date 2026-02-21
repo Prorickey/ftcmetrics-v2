@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   analyticsApi,
   ftcTeamsApi,
+  rankingsApi,
   scoutingApi,
   type OPRResult,
   type EPAResult,
@@ -375,6 +376,47 @@ function TeamAnalyticsContent() {
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
   const [seasonalData, setSeasonalData] = useState<SeasonalDataPoint[]>([]);
   const [seasonalLoading, setSeasonalLoading] = useState(true);
+  const [teamRankings, setTeamRankings] = useState<{
+    worldRank: number;
+    worldTotal: number;
+    countryRank: number | null;
+    countryTotal: number | null;
+    country: string | null;
+    stateRank: number | null;
+    stateTotal: number | null;
+    stateProv: string | null;
+    epa: number;
+    autoEpa: number;
+    teleopEpa: number;
+    endgameEpa: number;
+    autoWorldRank: number | null;
+    teleopWorldRank: number | null;
+    endgameWorldRank: number | null;
+    autoCountryRank: number | null;
+    teleopCountryRank: number | null;
+    endgameCountryRank: number | null;
+    autoStateRank: number | null;
+    teleopStateRank: number | null;
+    endgameStateRank: number | null;
+    opr: number | null;
+    autoOpr: number | null;
+    teleopOpr: number | null;
+    endgameOpr: number | null;
+    oprWorldRank: number | null;
+    oprWorldTotal: number | null;
+    oprCountryRank: number | null;
+    oprStateRank: number | null;
+    autoOprWorldRank: number | null;
+    teleopOprWorldRank: number | null;
+    endgameOprWorldRank: number | null;
+    autoOprCountryRank: number | null;
+    teleopOprCountryRank: number | null;
+    endgameOprCountryRank: number | null;
+    autoOprStateRank: number | null;
+    teleopOprStateRank: number | null;
+    endgameOprStateRank: number | null;
+  } | null>(null);
+  const [rankingsLoading, setRankingsLoading] = useState(true);
 
   // Fetch team info and event summaries in parallel
   useEffect(() => {
@@ -382,10 +424,15 @@ function TeamAnalyticsContent() {
       setLoading(true);
       setSeasonalLoading(true);
       try {
-        const [teamResult, summariesResult] = await Promise.all([
+        const [teamResult, summariesResult, rankingsResult] = await Promise.all([
           ftcTeamsApi.getTeam(teamNumber),
           ftcTeamsApi.getTeamEventSummaries(teamNumber),
+          rankingsApi.getTeamRankings(teamNumber).catch(() => null),
         ]);
+
+        if (rankingsResult?.success && rankingsResult.data) {
+          setTeamRankings(rankingsResult.data);
+        }
 
         if (teamResult.success && teamResult.data) {
           setTeamInfo(teamResult.data);
@@ -399,62 +446,73 @@ function TeamAnalyticsContent() {
 
         setLoading(false);
 
-        // Now fetch EPA/OPR for all past events in parallel for the seasonal charts
-        const now = new Date();
-        const pastEvents = summaries
-          .filter((e) => new Date(e.dateStart) < now)
-          .sort(
-            (a, b) =>
-              new Date(a.dateStart).getTime() - new Date(b.dateStart).getTime()
-          );
+        // Now fetch EPA/OPR for all past events in parallel for the seasonal charts.
+        // This is in a separate try/catch so that an error here does not prevent the
+        // main event list from displaying, and so that seasonal state is always resolved.
+        try {
+          const now = new Date();
+          const pastEvents = summaries
+            .filter((e) => new Date(e.dateStart) < now)
+            .sort(
+              (a, b) =>
+                new Date(a.dateStart).getTime() - new Date(b.dateStart).getTime()
+            );
 
-        if (pastEvents.length > 0) {
-          const analyticsResults = await Promise.all(
-            pastEvents.map((event) =>
-              analyticsApi
-                .getTeamAnalytics(teamNumber, event.eventCode)
-                .then((result) => ({
-                  eventCode: event.eventCode,
-                  eventName: event.eventName,
-                  result,
-                }))
-                .catch(() => ({
-                  eventCode: event.eventCode,
-                  eventName: event.eventName,
-                  result: { success: false as const, data: null, error: "Failed" },
-                }))
-            )
-          );
+          if (pastEvents.length > 0) {
+            const analyticsResults = await Promise.all(
+              pastEvents.map((event) =>
+                analyticsApi
+                  .getTeamAnalytics(teamNumber, event.eventCode)
+                  .then((result) => ({
+                    eventCode: event.eventCode,
+                    eventName: event.eventName,
+                    result,
+                  }))
+                  .catch(() => ({
+                    eventCode: event.eventCode,
+                    eventName: event.eventName,
+                    result: { success: false as const, data: null, error: "Failed" },
+                  }))
+              )
+            );
 
-          const seasonal: SeasonalDataPoint[] = analyticsResults.map(
-            ({ eventCode, eventName, result }) => {
-              const epa = result.success ? result.data?.epa ?? null : null;
-              const opr = result.success ? result.data?.opr ?? null : null;
-              return {
-                eventCode,
-                eventName,
-                shortName: abbreviateEventName(eventName),
-                epa: epa?.epa ?? null,
-                opr: opr?.opr ?? null,
-                autoEpa: epa?.autoEpa ?? null,
-                teleopEpa: epa?.teleopEpa ?? null,
-                endgameEpa: epa?.endgameEpa ?? null,
-                autoOpr: opr?.autoOpr ?? null,
-                teleopOpr: opr?.teleopOpr ?? null,
-                endgameOpr: opr?.endgameOpr ?? null,
-              };
-            }
-          );
+            const seasonal: SeasonalDataPoint[] = analyticsResults.map(
+              ({ eventCode, eventName, result }) => {
+                const epa = result.success ? result.data?.epa ?? null : null;
+                const opr = result.success ? result.data?.opr ?? null : null;
+                return {
+                  eventCode,
+                  eventName,
+                  shortName: abbreviateEventName(eventName),
+                  epa: epa?.epa ?? null,
+                  opr: opr?.opr ?? null,
+                  autoEpa: epa?.autoEpa ?? null,
+                  teleopEpa: epa?.teleopEpa ?? null,
+                  endgameEpa: epa?.endgameEpa ?? null,
+                  autoOpr: opr?.autoOpr ?? null,
+                  teleopOpr: opr?.teleopOpr ?? null,
+                  endgameOpr: opr?.endgameOpr ?? null,
+                };
+              }
+            );
 
-          setSeasonalData(seasonal);
-        } else {
+            setSeasonalData(seasonal);
+          } else {
+            setSeasonalData([]);
+          }
+        } catch (seasonalErr) {
+          console.error("Failed to fetch seasonal analytics:", seasonalErr);
           setSeasonalData([]);
+        } finally {
+          setSeasonalLoading(false);
         }
       } catch (err) {
         console.error("Failed to fetch team data:", err);
         setLoading(false);
-      } finally {
+        setSeasonalData([]);
         setSeasonalLoading(false);
+      } finally {
+        setRankingsLoading(false);
       }
     }
     fetchData();
@@ -570,6 +628,143 @@ function TeamAnalyticsContent() {
                     .join(", ")}
                   {teamInfo.rookieYear && ` | Rookie Year: ${teamInfo.rookieYear}`}
                 </p>
+              )}
+              {/* Season Rankings Card */}
+              {rankingsLoading && (
+                <div className="mt-4 bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-3" />
+                  <div className="space-y-2">
+                    <div className="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                    <div className="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                    <div className="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                    <div className="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                  </div>
+                </div>
+              )}
+              {!rankingsLoading && teamRankings && (
+                <div className="mt-4 grid md:grid-cols-2 gap-4">
+                  {/* EPA Rankings Card */}
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
+                      Season Rankings (EPA)
+                    </h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-gray-500 dark:text-gray-400">
+                            <th className="text-left font-medium pb-2 pr-3">Metric</th>
+                            <th className="text-center font-medium pb-2 px-2">
+                              <span className="text-ftc-orange">World</span>
+                            </th>
+                            {teamRankings.countryRank !== null && teamRankings.country && (
+                              <th className="text-center font-medium pb-2 px-2">
+                                <span className="text-blue-600 dark:text-blue-400">{teamRankings.country}</span>
+                              </th>
+                            )}
+                            {teamRankings.stateRank !== null && teamRankings.stateProv && (
+                              <th className="text-center font-medium pb-2 px-2">
+                                <span className="text-green-600 dark:text-green-400">{teamRankings.stateProv}</span>
+                              </th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                          {[
+                            { label: "Overall EPA", world: teamRankings.worldRank, country: teamRankings.countryRank, state: teamRankings.stateRank },
+                            { label: "Auto", world: teamRankings.autoWorldRank, country: teamRankings.autoCountryRank, state: teamRankings.autoStateRank },
+                            { label: "Teleop", world: teamRankings.teleopWorldRank, country: teamRankings.teleopCountryRank, state: teamRankings.teleopStateRank },
+                            { label: "Endgame", world: teamRankings.endgameWorldRank, country: teamRankings.endgameCountryRank, state: teamRankings.endgameStateRank },
+                          ].map((row) => (
+                            <tr key={row.label}>
+                              <td className="py-1.5 pr-3 font-medium text-gray-700 dark:text-gray-300">{row.label}</td>
+                              <td className="py-1.5 px-2 text-center font-mono text-ftc-orange">
+                                {row.world !== null ? (
+                                  <>#{row.world} <span className="text-gray-400 font-sans">/ {teamRankings.worldTotal}</span></>
+                                ) : "-"}
+                              </td>
+                              {teamRankings.countryRank !== null && teamRankings.country && (
+                                <td className="py-1.5 px-2 text-center font-mono text-blue-600 dark:text-blue-400">
+                                  {row.country !== null ? (
+                                    <>#{row.country} <span className="text-gray-400 font-sans">/ {teamRankings.countryTotal}</span></>
+                                  ) : "-"}
+                                </td>
+                              )}
+                              {teamRankings.stateRank !== null && teamRankings.stateProv && (
+                                <td className="py-1.5 px-2 text-center font-mono text-green-600 dark:text-green-400">
+                                  {row.state !== null ? (
+                                    <>#{row.state} <span className="text-gray-400 font-sans">/ {teamRankings.stateTotal}</span></>
+                                  ) : "-"}
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* OPR Rankings Card */}
+                  {teamRankings.oprWorldRank !== null && (
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                      <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
+                        Season Rankings (OPR)
+                      </h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-gray-500 dark:text-gray-400">
+                              <th className="text-left font-medium pb-2 pr-3">Metric</th>
+                              <th className="text-center font-medium pb-2 px-2">
+                                <span className="text-blue-600 dark:text-blue-400">World</span>
+                              </th>
+                              {teamRankings.oprCountryRank !== null && teamRankings.country && (
+                                <th className="text-center font-medium pb-2 px-2">
+                                  <span className="text-blue-600 dark:text-blue-400">{teamRankings.country}</span>
+                                </th>
+                              )}
+                              {teamRankings.oprStateRank !== null && teamRankings.stateProv && (
+                                <th className="text-center font-medium pb-2 px-2">
+                                  <span className="text-green-600 dark:text-green-400">{teamRankings.stateProv}</span>
+                                </th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {[
+                              { label: "Overall OPR", world: teamRankings.oprWorldRank, worldTotal: teamRankings.oprWorldTotal, country: teamRankings.oprCountryRank, state: teamRankings.oprStateRank },
+                              { label: "Auto", world: teamRankings.autoOprWorldRank, worldTotal: teamRankings.oprWorldTotal, country: teamRankings.autoOprCountryRank, state: teamRankings.autoOprStateRank },
+                              { label: "Teleop", world: teamRankings.teleopOprWorldRank, worldTotal: teamRankings.oprWorldTotal, country: teamRankings.teleopOprCountryRank, state: teamRankings.teleopOprStateRank },
+                              { label: "Endgame", world: teamRankings.endgameOprWorldRank, worldTotal: teamRankings.oprWorldTotal, country: teamRankings.endgameOprCountryRank, state: teamRankings.endgameOprStateRank },
+                            ].map((row) => (
+                              <tr key={row.label}>
+                                <td className="py-1.5 pr-3 font-medium text-gray-700 dark:text-gray-300">{row.label}</td>
+                                <td className="py-1.5 px-2 text-center font-mono text-blue-600 dark:text-blue-400">
+                                  {row.world !== null ? (
+                                    <>#{row.world} <span className="text-gray-400 font-sans">/ {row.worldTotal}</span></>
+                                  ) : "-"}
+                                </td>
+                                {teamRankings.oprCountryRank !== null && teamRankings.country && (
+                                  <td className="py-1.5 px-2 text-center font-mono text-blue-600 dark:text-blue-400">
+                                    {row.country !== null ? (
+                                      <>#{row.country}</>
+                                    ) : "-"}
+                                  </td>
+                                )}
+                                {teamRankings.oprStateRank !== null && teamRankings.stateProv && (
+                                  <td className="py-1.5 px-2 text-center font-mono text-green-600 dark:text-green-400">
+                                    {row.state !== null ? (
+                                      <>#{row.state}</>
+                                    ) : "-"}
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
