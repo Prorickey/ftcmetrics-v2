@@ -10,20 +10,20 @@ test.describe('Navigation', () => {
 
   test('clicking analytics link navigates correctly', async ({ page }) => {
     await page.goto('/');
-    const analyticsLink = page.getByRole('link', { name: /analytics/i });
+    const analyticsLink = page.getByRole('link', { name: 'Analytics', exact: true });
     if (await analyticsLink.isVisible()) {
       await analyticsLink.click();
-      await page.waitForLoadState('networkidle');
+      await page.waitForURL('**/analytics**');
       expect(page.url()).toContain('analytics');
     }
   });
 
   test('clicking rankings link navigates correctly', async ({ page }) => {
     await page.goto('/');
-    const rankingsLink = page.getByRole('link', { name: /rankings/i });
+    const rankingsLink = page.getByRole('link', { name: 'Rankings', exact: true });
     if (await rankingsLink.isVisible()) {
       await rankingsLink.click();
-      await page.waitForLoadState('networkidle');
+      await page.waitForURL('**/rankings**');
       expect(page.url()).toContain('rankings');
     }
   });
