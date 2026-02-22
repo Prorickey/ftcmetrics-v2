@@ -549,26 +549,34 @@ scouting.get("/entries", async (c) => {
       ];
     }
 
-    const entries = await prisma.scoutingEntry.findMany({
-      where,
-      include: {
-        scoutedTeam: true,
-        scoutingTeam: true,
-        scouter: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
+    const limit = Math.min(parseInt(c.req.query("limit") || "10", 10), 50);
+    const offset = parseInt(c.req.query("offset") || "0", 10);
+
+    const [entries, total] = await Promise.all([
+      prisma.scoutingEntry.findMany({
+        where,
+        include: {
+          scoutedTeam: true,
+          scoutingTeam: true,
+          scouter: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.scoutingEntry.count({ where }),
+    ]);
 
     return c.json({
       success: true,
       data: entries,
+      total,
     });
   } catch (error) {
     console.error("Error fetching scouting entries:", error);
@@ -1052,26 +1060,34 @@ scouting.get("/notes", async (c) => {
       where.notingTeamId = notingTeamId;
     }
 
-    const notes = await prisma.scoutingNote.findMany({
-      where,
-      include: {
-        aboutTeam: true,
-        notingTeam: true,
-        author: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
+    const limit = Math.min(parseInt(c.req.query("limit") || "10", 10), 50);
+    const offset = parseInt(c.req.query("offset") || "0", 10);
+
+    const [notes, total] = await Promise.all([
+      prisma.scoutingNote.findMany({
+        where,
+        include: {
+          aboutTeam: true,
+          notingTeam: true,
+          author: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.scoutingNote.count({ where }),
+    ]);
 
     return c.json({
       success: true,
       data: notes,
+      total,
     });
   } catch (error) {
     console.error("Error fetching scouting notes:", error);

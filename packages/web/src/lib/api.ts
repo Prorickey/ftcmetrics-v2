@@ -298,14 +298,31 @@ export const scoutingApi = {
     userId: string,
     filters?: { eventCode?: string; teamNumber?: number; scoutingTeamId?: string }
   ) => {
-    const params = new URLSearchParams();
-    if (filters?.eventCode) params.set("eventCode", filters.eventCode);
-    if (filters?.teamNumber) params.set("teamNumber", String(filters.teamNumber));
-    if (filters?.scoutingTeamId) params.set("scoutingTeamId", filters.scoutingTeamId);
+    const PAGE_SIZE = 10;
+    const baseParams = new URLSearchParams();
+    if (filters?.eventCode) baseParams.set("eventCode", filters.eventCode);
+    if (filters?.teamNumber) baseParams.set("teamNumber", String(filters.teamNumber));
+    if (filters?.scoutingTeamId) baseParams.set("scoutingTeamId", filters.scoutingTeamId);
+    baseParams.set("limit", String(PAGE_SIZE));
 
-    return fetchApi(`/scouting/entries?${params.toString()}`, {
-      headers: { "X-User-Id": userId },
-    });
+    const allEntries: unknown[] = [];
+    let offset = 0;
+    let total = 0;
+
+    do {
+      const params = new URLSearchParams(baseParams);
+      params.set("offset", String(offset));
+      // API returns { success, data: [...], total }
+      const result = await fetchApi<unknown[]>(`/scouting/entries?${params.toString()}`, {
+        headers: { "X-User-Id": userId },
+      }) as ApiResponse<unknown[]> & { total?: number };
+      if (!result.success || !result.data) break;
+      allEntries.push(...result.data);
+      total = result.total || 0;
+      offset += PAGE_SIZE;
+    } while (offset < total);
+
+    return { success: true, data: allEntries };
   },
 
   updateEntry: async (
@@ -380,15 +397,31 @@ export const scoutingApi = {
     eventCode?: string;
     notingTeamId?: string;
   }) => {
-    const params = new URLSearchParams();
+    const PAGE_SIZE = 10;
+    const baseParams = new URLSearchParams();
     if (filters?.aboutTeamNumber)
-      params.set("aboutTeamNumber", String(filters.aboutTeamNumber));
-    if (filters?.eventCode) params.set("eventCode", filters.eventCode);
-    if (filters?.notingTeamId) params.set("notingTeamId", filters.notingTeamId);
+      baseParams.set("aboutTeamNumber", String(filters.aboutTeamNumber));
+    if (filters?.eventCode) baseParams.set("eventCode", filters.eventCode);
+    if (filters?.notingTeamId) baseParams.set("notingTeamId", filters.notingTeamId);
+    baseParams.set("limit", String(PAGE_SIZE));
 
-    return fetchApi(`/scouting/notes?${params.toString()}`, {
-      headers: { "X-User-Id": userId },
-    });
+    const allNotes: unknown[] = [];
+    let offset = 0;
+    let total = 0;
+
+    do {
+      const params = new URLSearchParams(baseParams);
+      params.set("offset", String(offset));
+      const result = await fetchApi<unknown[]>(`/scouting/notes?${params.toString()}`, {
+        headers: { "X-User-Id": userId },
+      }) as ApiResponse<unknown[]> & { total?: number };
+      if (!result.success || !result.data) break;
+      allNotes.push(...result.data);
+      total = result.total || 0;
+      offset += PAGE_SIZE;
+    } while (offset < total);
+
+    return { success: true, data: allNotes };
   },
 
   getTeamStats: async (userId: string, teamId: string) => {

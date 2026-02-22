@@ -11,6 +11,15 @@ const nextConfig: NextConfig = {
 const pwaConfig = withPWA({
   dest: "public",
   register: true,
+  workboxOptions: {
+    navigateFallbackDenylist: [/^\/api\//],
+    runtimeCaching: [
+      {
+        urlPattern: /^https?:\/\/.*\/api\//,
+        handler: "NetworkOnly",
+      },
+    ],
+  },
 });
 
 export default pwaConfig(nextConfig);
