@@ -30,6 +30,8 @@ services:
       - "3307:3001"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER must be set}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set}
+      REDIS_URL: "redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       FTC_API_USERNAME: ${FTC_API_USERNAME}
       FTC_API_TOKEN: ${FTC_API_TOKEN}
       CORS_ORIGIN: ${CORS_ORIGIN}
@@ -38,6 +40,8 @@ services:
       - uploads:/app/packages/api/uploads
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3001/"]
@@ -67,7 +71,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
