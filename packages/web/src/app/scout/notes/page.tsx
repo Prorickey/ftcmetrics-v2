@@ -177,7 +177,7 @@ function NotesContent() {
     }
 
     fetchNotes();
-  }, [selectedTeam, selectedEvent]);
+  }, [session?.user?.id, selectedTeam, selectedEvent]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
