@@ -201,7 +201,8 @@ userTeams.get("/:teamId", async (c) => {
     });
   } catch (error) {
     console.error("Error fetching team:", error);
-    return c.json({ success: false, error: "Failed to fetch team" }, 500);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    return c.json({ success: false, error: "Failed to fetch team", details: errMsg }, 500);
   }
 });
 
