@@ -575,11 +575,11 @@ function ScoutContent() {
         }),
         scoutingApi.getNotes(session.user!.id, { notingTeamId: selectedTeam }),
       ]);
-      console.log("[Scout] Entries fetch result:", { success: entriesResult.success, count: entriesResult.data?.length || 0 });
+      console.log("[Scout] Entries fetch result:", { success: entriesResult.success, count: (entriesResult.data as unknown[])?.length || 0 });
       if (entriesResult.success && entriesResult.data) {
         setEntries(entriesResult.data as ScoutingEntry[]);
       }
-      console.log("[Scout] Notes fetch result:", { success: notesResult.success, count: notesResult.data?.length || 0 });
+      console.log("[Scout] Notes fetch result:", { success: notesResult.success, count: (notesResult.data as unknown[])?.length || 0 });
       if (notesResult.success && notesResult.data) {
         setNotes(notesResult.data as ScoutingNote[]);
       }

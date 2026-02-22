@@ -177,7 +177,7 @@ function NotesContent() {
           notingTeamId: selectedTeam,
           eventCode: selectedEvent || undefined,
         });
-      console.log("[ScoutNotes] Notes fetch result:", { success: result.success, count: result.data?.length || 0 });
+      console.log("[ScoutNotes] Notes fetch result:", { success: result.success, count: (result.data as ScoutingNote[])?.length || 0 });
         if (result.success && result.data) {
           setNotes(result.data as ScoutingNote[]);
         }
