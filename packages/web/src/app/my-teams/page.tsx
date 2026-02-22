@@ -66,11 +66,11 @@ interface TeamProfile {
   }>;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 function resolveMediaUrl(url: string): string {
   if (url.startsWith("/api/uploads/")) {
-    return `${API_URL}${url}`;
+    return `${API_URL}${url.replace("/api", "")}`;
   }
   return url;
 }

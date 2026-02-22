@@ -219,7 +219,7 @@ export async function getQueueCount(): Promise<number> {
  * Returns the number of successfully synced entries
  */
 export async function syncPendingEntries(
-  apiUrl: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+  apiUrl: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
 ): Promise<{ synced: number; failed: number; errors: string[] }> {
   if (!isOnline()) {
     return { synced: 0, failed: 0, errors: ["Device is offline"] };
@@ -243,7 +243,7 @@ export async function syncPendingEntries(
     }
 
     try {
-      const response = await fetch(`${apiUrl}/api/scouting/entries`, {
+      const response = await fetch(`${apiUrl}/scouting/entries`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

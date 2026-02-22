@@ -2,7 +2,7 @@
  * API client for FTC Metrics backend
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -45,7 +45,7 @@ export const teamsApi = {
         name: string;
         sharingLevel: string;
       };
-    }>>(`/api/user-teams`, {
+    }>>(`/user-teams`, {
       headers: { "X-User-Id": userId },
     });
   },
@@ -55,7 +55,7 @@ export const teamsApi = {
       id: string;
       teamNumber: number;
       name: string;
-    }>("/api/user-teams", {
+    }>("/user-teams", {
       method: "POST",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -102,7 +102,7 @@ export const teamsApi = {
         fileSize: number | null;
         mimeType: string | null;
       }>;
-    }>(`/api/user-teams/${teamId}`, {
+    }>(`/user-teams/${teamId}`, {
       headers: { "X-User-Id": userId },
     });
   },
@@ -120,7 +120,7 @@ export const teamsApi = {
       links?: Array<{ title: string; url: string }> | null;
     }
   ) => {
-    return fetchApi(`/api/user-teams/${teamId}`, {
+    return fetchApi(`/user-teams/${teamId}`, {
       method: "PATCH",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -136,7 +136,7 @@ export const teamsApi = {
       id: string;
       code: string;
       expiresAt: string | null;
-    }>(`/api/user-teams/${teamId}/invites`, {
+    }>(`/user-teams/${teamId}/invites`, {
       method: "POST",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -147,7 +147,7 @@ export const teamsApi = {
     return fetchApi<{
       teamId: string;
       role: string;
-    }>("/api/user-teams/join", {
+    }>("/user-teams/join", {
       method: "POST",
       headers: { "X-User-Id": userId },
       body: JSON.stringify({ code }),
@@ -160,7 +160,7 @@ export const teamsApi = {
     memberId: string,
     data: { role: string }
   ) => {
-    return fetchApi(`/api/user-teams/${teamId}/members/${memberId}`, {
+    return fetchApi(`/user-teams/${teamId}/members/${memberId}`, {
       method: "PATCH",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -168,14 +168,14 @@ export const teamsApi = {
   },
 
   removeMember: async (userId: string, teamId: string, memberId: string) => {
-    return fetchApi(`/api/user-teams/${teamId}/members/${memberId}`, {
+    return fetchApi(`/user-teams/${teamId}/members/${memberId}`, {
       method: "DELETE",
       headers: { "X-User-Id": userId },
     });
   },
 
   leaveTeam: async (userId: string, teamId: string) => {
-    return fetchApi(`/api/user-teams/${teamId}/leave`, {
+    return fetchApi(`/user-teams/${teamId}/leave`, {
       method: "POST",
       headers: { "X-User-Id": userId },
     });
@@ -196,7 +196,7 @@ export const teamsApi = {
       isUpload: boolean;
       fileSize: number | null;
       mimeType: string | null;
-    }>(`/api/user-teams/${teamId}/media`, {
+    }>(`/user-teams/${teamId}/media`, {
       method: "POST",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -214,7 +214,7 @@ export const teamsApi = {
     if (data.description) formData.append("description", data.description);
     formData.append("file", data.file);
 
-    const url = `${API_URL}/api/user-teams/${teamId}/media`;
+    const url = `${API_URL}/user-teams/${teamId}/media`;
     const response = await fetch(url, {
       method: "POST",
       headers: { "X-User-Id": userId },
@@ -240,7 +240,7 @@ export const teamsApi = {
     mediaId: string,
     data: { title?: string; url?: string; description?: string; sortOrder?: number }
   ) => {
-    return fetchApi(`/api/user-teams/${teamId}/media/${mediaId}`, {
+    return fetchApi(`/user-teams/${teamId}/media/${mediaId}`, {
       method: "PATCH",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -248,7 +248,7 @@ export const teamsApi = {
   },
 
   removeMedia: async (userId: string, teamId: string, mediaId: string) => {
-    return fetchApi(`/api/user-teams/${teamId}/media/${mediaId}`, {
+    return fetchApi(`/user-teams/${teamId}/media/${mediaId}`, {
       method: "DELETE",
       headers: { "X-User-Id": userId },
     });
@@ -278,7 +278,7 @@ export const scoutingApi = {
       allianceNotes?: string;
     }
   ) => {
-    return fetchApi("/api/scouting/entries", {
+    return fetchApi("/scouting/entries", {
       method: "POST",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -294,7 +294,7 @@ export const scoutingApi = {
     if (filters?.teamNumber) params.set("teamNumber", String(filters.teamNumber));
     if (filters?.scoutingTeamId) params.set("scoutingTeamId", filters.scoutingTeamId);
 
-    return fetchApi(`/api/scouting/entries?${params.toString()}`, {
+    return fetchApi(`/scouting/entries?${params.toString()}`, {
       headers: { "X-User-Id": userId },
     });
   },
@@ -318,7 +318,7 @@ export const scoutingApi = {
       allianceNotes: string;
     }>
   ) => {
-    return fetchApi(`/api/scouting/entries/${entryId}`, {
+    return fetchApi(`/scouting/entries/${entryId}`, {
       method: "PATCH",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -342,7 +342,7 @@ export const scoutingApi = {
         teleopOverflow: number;
         teleopDepot: number;
       } | null;
-    }>(`/api/scouting/team-summary/${teamNumber}${params}`);
+    }>(`/scouting/team-summary/${teamNumber}${params}`);
   },
 
   submitNote: async (
@@ -359,7 +359,7 @@ export const scoutingApi = {
       generalNotes?: string;
     }
   ) => {
-    return fetchApi("/api/scouting/notes", {
+    return fetchApi("/scouting/notes", {
       method: "POST",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -377,7 +377,7 @@ export const scoutingApi = {
     if (filters?.eventCode) params.set("eventCode", filters.eventCode);
     if (filters?.notingTeamId) params.set("notingTeamId", filters.notingTeamId);
 
-    return fetchApi(`/api/scouting/notes?${params.toString()}`, {
+    return fetchApi(`/scouting/notes?${params.toString()}`, {
       headers: { "X-User-Id": userId },
     });
   },
@@ -388,13 +388,13 @@ export const scoutingApi = {
       eventsCount: number;
       teamsScoutedCount: number;
       notesCount: number;
-    }>(`/api/scouting/team-stats/${teamId}`, {
+    }>(`/scouting/team-stats/${teamId}`, {
       headers: { "X-User-Id": userId },
     });
   },
 
   deductPartner: async (userId: string, entryId: string) => {
-    return fetchApi(`/api/scouting/entries/${entryId}/deduct-partner`, {
+    return fetchApi(`/scouting/entries/${entryId}/deduct-partner`, {
       method: "POST",
       headers: { "X-User-Id": userId },
     });
@@ -409,7 +409,7 @@ export const scoutingApi = {
       skipped: number;
       failed: number;
       total: number;
-    }>("/api/scouting/retry-deductions", {
+    }>("/scouting/retry-deductions", {
       method: "POST",
       headers: { "X-User-Id": userId },
       body: JSON.stringify(data),
@@ -429,11 +429,11 @@ export const eventsApi = {
       dateStart: string;
       dateEnd: string;
       type: string;
-    }>>("/api/events");
+    }>>("/events");
   },
 
   getEvent: async (eventCode: string) => {
-    return fetchApi(`/api/events/${eventCode}`);
+    return fetchApi(`/events/${eventCode}`);
   },
 
   getEventTeams: async (eventCode: string) => {
@@ -443,19 +443,19 @@ export const eventsApi = {
       nameShort: string;
       city: string;
       stateProv: string;
-    }>>(`/api/events/${eventCode}/teams`);
+    }>>(`/events/${eventCode}/teams`);
   },
 
   getEventSchedule: async (eventCode: string, level: "qual" | "playoff" = "qual") => {
-    return fetchApi(`/api/events/${eventCode}/schedule?level=${level}`);
+    return fetchApi(`/events/${eventCode}/schedule?level=${level}`);
   },
 
   getEventMatches: async (eventCode: string, level: "qual" | "playoff" = "qual") => {
-    return fetchApi(`/api/events/${eventCode}/matches?level=${level}`);
+    return fetchApi(`/events/${eventCode}/matches?level=${level}`);
   },
 
   getEventRankings: async (eventCode: string) => {
-    return fetchApi(`/api/events/${eventCode}/rankings`);
+    return fetchApi(`/events/${eventCode}/rankings`);
   },
 };
 
@@ -470,11 +470,11 @@ export const ftcTeamsApi = {
       stateProv: string;
       country: string;
       rookieYear: number;
-    }>(`/api/teams/${teamNumber}`);
+    }>(`/teams/${teamNumber}`);
   },
 
   getTeamEvents: async (teamNumber: number) => {
-    return fetchApi(`/api/teams/${teamNumber}/events`);
+    return fetchApi(`/teams/${teamNumber}/events`);
   },
 
   search: async (query: string) => {
@@ -486,7 +486,7 @@ export const ftcTeamsApi = {
         city: string | null;
         stateProv: string | null;
       }>
-    >(`/api/teams/search?q=${encodeURIComponent(query)}`);
+    >(`/teams/search?q=${encodeURIComponent(query)}`);
   },
 
   getTeamProfile: async (teamNumber: number, userId?: string) => {
@@ -507,7 +507,7 @@ export const ftcTeamsApi = {
         fileSize: number | null;
         mimeType: string | null;
       }>;
-    } | null>(`/api/teams/${teamNumber}/profile`, {
+    } | null>(`/teams/${teamNumber}/profile`, {
       headers: userId ? { "X-User-Id": userId } : {},
     });
   },
@@ -526,7 +526,7 @@ export const ftcTeamsApi = {
         ties: number | null;
         qualAverage: number | null;
       }>
-    >(`/api/teams/${teamNumber}/event-summaries`);
+    >(`/teams/${teamNumber}/event-summaries`);
   },
 };
 
@@ -554,14 +554,14 @@ export const rankingsApi = {
         matchCount: number;
         trend: "up" | "down" | "stable";
       }>;
-    }>(`/api/rankings/epa${qs ? `?${qs}` : ""}`);
+    }>(`/rankings/epa${qs ? `?${qs}` : ""}`);
   },
 
   getFilters: async () => {
     return fetchApi<{
       countries: string[];
       states: Record<string, string[]>;
-    }>("/api/rankings/filters");
+    }>("/rankings/filters");
   },
 
   getTeamRankings: async (teamNumber: number) => {
@@ -604,7 +604,7 @@ export const rankingsApi = {
       autoOprStateRank: number | null;
       teleopOprStateRank: number | null;
       endgameOprStateRank: number | null;
-    }>(`/api/rankings/team/${teamNumber}`);
+    }>(`/rankings/team/${teamNumber}`);
   },
 };
 
@@ -653,7 +653,7 @@ export const analyticsApi = {
       eventCode: string;
       matchCount: number;
       rankings: OPRResult[];
-    }>(`/api/analytics/opr/${eventCode}`);
+    }>(`/analytics/opr/${eventCode}`);
   },
 
   getEPA: async (eventCode: string) => {
@@ -661,7 +661,7 @@ export const analyticsApi = {
       eventCode: string;
       matchCount: number;
       rankings: EPAResult[];
-    }>(`/api/analytics/epa/${eventCode}`);
+    }>(`/analytics/epa/${eventCode}`);
   },
 
   getTeamAnalytics: async (teamNumber: number, eventCode?: string) => {
@@ -671,7 +671,7 @@ export const analyticsApi = {
       eventCode?: string;
       opr: OPRResult | null;
       epa: EPAResult | null;
-    }>(`/api/analytics/team/${teamNumber}${params}`);
+    }>(`/analytics/team/${teamNumber}${params}`);
   },
 
   predictMatch: async (data: {
@@ -692,7 +692,7 @@ export const analyticsApi = {
         predictedWinner: "red" | "blue";
         margin: number;
       };
-    }>("/api/analytics/predict", {
+    }>("/analytics/predict", {
       method: "POST",
       body: JSON.stringify(data),
     });
@@ -703,7 +703,7 @@ export const analyticsApi = {
       teamNumber: number;
       eventCode: string;
       matches: TeamMatchBreakdown[];
-    }>(`/api/analytics/team/${teamNumber}/matches?eventCode=${encodeURIComponent(eventCode)}`);
+    }>(`/analytics/team/${teamNumber}/matches?eventCode=${encodeURIComponent(eventCode)}`);
   },
 
   compareTeams: async (eventCode: string, teams: number[]) => {
@@ -714,6 +714,6 @@ export const analyticsApi = {
         opr: OPRResult | null;
         epa: EPAResult | null;
       }>;
-    }>(`/api/analytics/compare?eventCode=${eventCode}&teams=${teams.join(",")}`);
+    }>(`/analytics/compare?eventCode=${eventCode}&teams=${teams.join(",")}`);
   },
 };
