@@ -420,27 +420,35 @@ function TeamAnalyticsContent() {
 
   // Fetch team info and event summaries in parallel
   useEffect(() => {
+    console.log("[Analytics] useEffect fired for team:", teamNumber);
     async function fetchData() {
+      console.log("[Analytics] Fetching data for team", teamNumber);
       setLoading(true);
       setSeasonalLoading(true);
       try {
+        console.log("[Analytics] Making parallel API calls for team info, summaries, and rankings");
         const [teamResult, summariesResult, rankingsResult] = await Promise.all([
           ftcTeamsApi.getTeam(teamNumber),
           ftcTeamsApi.getTeamEventSummaries(teamNumber),
           rankingsApi.getTeamRankings(teamNumber).catch(() => null),
         ]);
 
+        console.log("[Analytics] API responses received. Team:", teamResult.success, "Summaries:", summariesResult.success, "Rankings:", rankingsResult?.success);
+
         if (rankingsResult?.success && rankingsResult.data) {
+          console.log("[Analytics] Rankings data loaded:", rankingsResult.data);
           setTeamRankings(rankingsResult.data);
         }
 
         if (teamResult.success && teamResult.data) {
+          console.log("[Analytics] Team info loaded:", teamResult.data.teamNumber, teamResult.data.nameFull);
           setTeamInfo(teamResult.data);
         }
 
         let summaries: EventSummary[] = [];
         if (summariesResult.success && summariesResult.data) {
           summaries = summariesResult.data;
+          console.log("[Analytics] Event summaries loaded:", summaries.length, "events");
           setEventSummaries(summaries);
         }
 
@@ -457,6 +465,8 @@ function TeamAnalyticsContent() {
               (a, b) =>
                 new Date(a.dateStart).getTime() - new Date(b.dateStart).getTime()
             );
+
+          console.log("[Analytics] Fetching seasonal analytics for", pastEvents.length, "past events");
 
           if (pastEvents.length > 0) {
             const analyticsResults = await Promise.all(
@@ -475,6 +485,8 @@ function TeamAnalyticsContent() {
                   }))
               )
             );
+
+            console.log("[Analytics] Seasonal API responses received:", analyticsResults.length, "events processed");
 
             const seasonal: SeasonalDataPoint[] = analyticsResults.map(
               ({ eventCode, eventName, result }) => {
@@ -496,12 +508,14 @@ function TeamAnalyticsContent() {
               }
             );
 
+            console.log("[Analytics] Seasonal data processed:", seasonal.length, "data points");
             setSeasonalData(seasonal);
           } else {
+            console.log("[Analytics] No past events found");
             setSeasonalData([]);
           }
         } catch (seasonalErr) {
-          console.error("Failed to fetch seasonal analytics:", seasonalErr);
+          console.error("[Analytics] Failed to fetch seasonal analytics:", seasonalErr);
           setSeasonalData([]);
         } finally {
           setSeasonalLoading(false);
@@ -520,23 +534,33 @@ function TeamAnalyticsContent() {
 
   const handleExpandEvent = useCallback(
     async (eventCode: string) => {
+      console.log("[Analytics] handleExpandEvent called for eventCode:", eventCode, "currently expanded:", expandedEvent);
       if (expandedEvent === eventCode) {
+        console.log("[Analytics] Collapsing event details");
         setExpandedEvent(null);
         return;
       }
 
+      console.log("[Analytics] Expanding event details for:", eventCode);
       setExpandedEvent(eventCode);
 
       // If we already have cached detail data, don't refetch
-      if (eventDetails[eventCode]) return;
+      if (eventDetails[eventCode]) {
+        console.log("[Analytics] Using cached event details for:", eventCode);
+        return;
+      }
 
+      console.log("[Analytics] Fetching event details for:", eventCode);
       setDetailLoading(eventCode);
       try {
+        console.log("[Analytics] Making parallel calls for analytics, scouting, and matches");
         const [analyticsResult, scoutingResult, matchesResult] = await Promise.all([
           analyticsApi.getTeamAnalytics(teamNumber, eventCode),
           scoutingApi.getTeamSummary(teamNumber, eventCode),
           analyticsApi.getTeamMatches(teamNumber, eventCode),
         ]);
+
+        console.log("[Analytics] Event detail responses received. Analytics:", analyticsResult.success, "Scouting:", scoutingResult.success, "Matches:", matchesResult.success);
 
         setEventDetails((prev) => ({
           ...prev,
@@ -547,7 +571,8 @@ function TeamAnalyticsContent() {
             matches: matchesResult.success ? matchesResult.data?.matches ?? null : null,
           },
         }));
-      } catch {
+      } catch (err) {
+        console.error("[Analytics] Error fetching event details:", err);
         setEventDetails((prev) => ({
           ...prev,
           [eventCode]: { opr: null, epa: null, scouting: null, matches: null },

@@ -67,6 +67,7 @@ interface TeamProfile {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+console.log("[MyTeams] Resolved API_URL:", API_URL);
 
 function resolveMediaUrl(url: string): string {
   if (url.startsWith("/api/uploads/")) {
@@ -118,14 +119,17 @@ export default function MyTeamsPage() {
     async function fetchTeams() {
       if (!session?.user?.id) return;
 
+      console.log("[MyTeams] useEffect fired, fetching teams for user:", session?.user?.id);
       try {
         const result = await teamsApi.getMyTeams(session.user.id);
+        console.log("[MyTeams] getMyTeams response:", result);
         if (result.success && result.data) {
           setTeams(result.data);
         } else {
           setError(result.error || "Failed to load teams");
         }
       } catch (err) {
+        console.error("[MyTeams] Error fetching teams:", err);
         setError("Failed to load teams");
       } finally {
         setLoading(false);
@@ -137,6 +141,7 @@ export default function MyTeamsPage() {
 
   const handleSearch = useCallback(
     (query: string) => {
+      console.log("[MyTeams] handleSearch called with query:", query);
       setSearchQuery(query);
       setSelectedTeamNumber(null);
 
@@ -150,12 +155,15 @@ export default function MyTeamsPage() {
 
       setSearching(true);
       debounceRef.current = setTimeout(async () => {
+        console.log("[MyTeams] Executing search for:", query.trim());
         try {
           const result = await ftcTeamsApi.search(query.trim());
+          console.log("[MyTeams] Search result:", result);
           if (result.success && result.data) {
             setSearchResults(result.data);
           }
-        } catch {
+        } catch (err) {
+          console.error("[MyTeams] Search error:", err);
           // silently fail
         } finally {
           setSearching(false);
@@ -421,6 +429,7 @@ function TeamProfileDisplay({
 
   useEffect(() => {
     let cancelled = false;
+    console.log("[MyTeams] TeamProfileDisplay useEffect fired for teamNumber:", teamNumber, "userId:", userId);
     setLoading(true);
     setTeamInfo(null);
     setEvents([]);
@@ -435,6 +444,7 @@ function TeamProfileDisplay({
 
       if (cancelled) return;
 
+      console.log("[MyTeams] TeamProfileDisplay Promise.all results - info:", infoRes, "events:", eventsRes, "profile:", profileRes);
       if (infoRes?.success && infoRes.data) {
         setTeamInfo(infoRes.data);
       }

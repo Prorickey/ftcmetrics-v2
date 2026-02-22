@@ -456,6 +456,7 @@ function EditEntryForm({
 
 function ScoutContent() {
   const { data: session } = useSession();
+  console.log("[Scout] Session loaded:", session?.user?.id ? `User ${session.user.id}` : "No session");
   const searchParams = useSearchParams();
   const router = useRouter();
   const preselectedTeamId = searchParams.get("team");
@@ -485,10 +486,15 @@ function ScoutContent() {
 
   useEffect(() => {
     async function fetchTeams() {
-      if (!session?.user?.id) return;
+      if (!session?.user?.id) {
+        console.log("[Scout] Skipping teams fetch - no session");
+        return;
+      }
+      console.log("[Scout] Fetching user teams for user:", session.user.id);
 
       try {
         const result = await teamsApi.getMyTeams(session.user.id);
+        console.log("[Scout] Teams fetch result:", { success: result.success, count: result.data?.length || 0, error: result.error });
         if (result.success && result.data) {
           setTeams(result.data);
           // Auto-select if preselected or only one team
@@ -552,21 +558,28 @@ function ScoutContent() {
   // Fetch scouting entries and notes for the selected team
   const hasLoadedOnce = useRef(false);
   const fetchEntries = useCallback(async () => {
-    if (!session?.user?.id || !selectedTeam) return;
+    if (!session?.user?.id || !selectedTeam) {
+      console.log("[Scout] Skipping entries fetch - missing session or team");
+      return;
+    }
+    console.log("[Scout] Fetching entries and notes for team:", selectedTeam);
     // Only show loading skeleton on initial load, not on refetches
     if (!hasLoadedOnce.current) {
       setEntriesLoading(true);
     }
     try {
+      console.log("[Scout] Calling getEntries and getNotes APIs...");
       const [entriesResult, notesResult] = await Promise.all([
         scoutingApi.getEntries(session.user.id, {
           scoutingTeamId: selectedTeam,
         }),
         scoutingApi.getNotes(session.user!.id, { notingTeamId: selectedTeam }),
       ]);
+      console.log("[Scout] Entries fetch result:", { success: entriesResult.success, count: entriesResult.data?.length || 0 });
       if (entriesResult.success && entriesResult.data) {
         setEntries(entriesResult.data as ScoutingEntry[]);
       }
+      console.log("[Scout] Notes fetch result:", { success: notesResult.success, count: notesResult.data?.length || 0 });
       if (notesResult.success && notesResult.data) {
         setNotes(notesResult.data as ScoutingNote[]);
       }
@@ -626,7 +639,9 @@ function ScoutContent() {
     setDeductingId(entryId);
     setDeductMessage(null);
     try {
+      console.log("[Scout] Deducting partner for entry:", entryId);
       const result = await scoutingApi.deductPartner(session.user.id, entryId);
+      console.log("[Scout] Deduct partner result:", { success: result.success, error: result.error });
       if (result.success) {
         setDeductMessage({ id: entryId, text: "Partner entry created", type: "success" });
         // Refresh entries to show the new deducted entry

@@ -39,6 +39,7 @@ interface ScoutingNote {
 
 function NotesContent() {
   const { data: session } = useSession();
+  console.log("[ScoutNotes] Session loaded:", session?.user?.id ? `User ${session.user.id}` : "No session");
   const searchParams = useSearchParams();
   const preselectedTeam = searchParams.get("team") || "";
 
@@ -72,10 +73,15 @@ function NotesContent() {
   // Fetch user's teams
   useEffect(() => {
     async function fetchTeams() {
-      if (!session?.user?.id) return;
+      if (!session?.user?.id) {
+        console.log("[ScoutNotes] Skipping teams fetch - no session");
+        return;
+      }
+      console.log("[ScoutNotes] Fetching user teams for user:", session.user.id);
 
       try {
         const result = await teamsApi.getMyTeams(session.user.id);
+        console.log("[ScoutNotes] Teams fetch result:", { success: result.success, count: result.data?.length || 0, error: result.error });
         if (result.success && result.data) {
           setTeams(result.data);
           if (result.data.length === 1 && !preselectedTeam) {
@@ -159,13 +165,19 @@ function NotesContent() {
     if (!selectedTeam) return;
 
     async function fetchNotes() {
-      if (!session?.user?.id) return;
+      if (!session?.user?.id) {
+        console.log("[ScoutNotes] Skipping notes fetch - no session");
+        return;
+      }
+      console.log("[ScoutNotes] Fetching notes for team:", selectedTeam, "event:", selectedEvent);
       setNotesLoading(true);
       try {
+        console.log("[ScoutNotes] Calling getNotes API...");
         const result = await scoutingApi.getNotes(session.user.id, {
           notingTeamId: selectedTeam,
           eventCode: selectedEvent || undefined,
         });
+      console.log("[ScoutNotes] Notes fetch result:", { success: result.success, count: result.data?.length || 0 });
         if (result.success && result.data) {
           setNotes(result.data as ScoutingNote[]);
         }
@@ -193,6 +205,7 @@ function NotesContent() {
     setError(null);
 
     try {
+    console.log("[ScoutNotes] Submitting note for team:", formData.aboutTeamNumber);
       const result = await scoutingApi.submitNote(session.user.id, {
         notingTeamId: selectedTeam,
         aboutTeamNumber: teamNumber,
@@ -205,6 +218,7 @@ function NotesContent() {
         generalNotes: formData.generalNotes || undefined,
       });
 
+    console.log("[ScoutNotes] Submit note result:", { success: result.success, error: result.error });
       if (result.success) {
         setSuccess(true);
         setShowForm(false);

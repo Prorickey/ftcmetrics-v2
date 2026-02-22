@@ -7,6 +7,7 @@ import Link from "next/link";
 import { teamsApi, scoutingApi } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+console.log("[TeamDetail] Resolved API_URL:", API_URL);
 
 function resolveMediaUrl(url: string): string {
   if (url.startsWith("/api/uploads/")) {
@@ -98,18 +99,21 @@ export default function TeamDetailPage() {
   const isAdmin = currentUserMembership?.role === "MENTOR" || currentUserMembership?.role === "LEADER";
 
   useEffect(() => {
+    console.log("[TeamDetail] useEffect fired for teamId:", teamId, "userId:", session?.user?.id);
     fetchTeam();
   }, [session?.user?.id, teamId]);
 
   async function fetchTeam() {
     if (!session?.user?.id) return;
 
+    console.log("[TeamDetail] fetchTeam called for teamId:", teamId);
     try {
       const [teamResult, statsResult] = await Promise.all([
         teamsApi.getTeam(session.user.id, teamId),
         scoutingApi.getTeamStats(session.user.id, teamId),
       ]);
 
+      console.log("[TeamDetail] Promise.all results - team:", teamResult, "stats:", statsResult);
       if (teamResult.success && teamResult.data) {
         setTeam(teamResult.data);
       } else {
@@ -120,6 +124,7 @@ export default function TeamDetailPage() {
         setStats(statsResult.data);
       }
     } catch (err) {
+      console.error("[TeamDetail] Error fetching team:", err);
       setError("Failed to load team");
     } finally {
       setLoading(false);

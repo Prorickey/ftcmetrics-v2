@@ -3,6 +3,7 @@
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+console.log("[API] API_URL configured as:", API_URL);
 
 interface ApiResponse<T> {
   success: boolean;
@@ -15,6 +16,7 @@ async function fetchApi<T>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const url = `${API_URL}${endpoint}`;
+  console.log("[API] Fetching:", url, "| API_URL:", API_URL);
 
   // Only set Content-Type for requests with a body (POST, PUT, PATCH, etc.)
   // Setting it on GET requests triggers unnecessary CORS preflight
@@ -23,14 +25,21 @@ async function fetchApi<T>(
     headers["Content-Type"] = headers["Content-Type"] || "application/json";
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    credentials: "include",
-  });
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: "include",
+    });
 
-  const data = await response.json();
-  return data;
+    console.log("[API] Response:", url, "status:", response.status);
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("[API] Error fetching:", url, error);
+    throw error;
+  }
 }
 
 // Team Management API

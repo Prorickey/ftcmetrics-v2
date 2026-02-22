@@ -208,14 +208,17 @@ function GlobalRankingsContent() {
 
   // Fetch filter options on mount
   useEffect(() => {
+    console.log("[Rankings] Loading filters");
     async function loadFilters() {
       setFiltersLoading(true);
       try {
         const result = await rankingsApi.getFilters();
+        console.log("[Rankings] Filters loaded successfully:", result.success, result.data?.countries?.length, "countries");
         if (result.success && result.data) {
           setFilters(result.data);
         }
-      } catch {
+      } catch (err) {
+        console.error("[Rankings] Failed to load filters:", err);
         // Filters are optional, don't block the page
       } finally {
         setFiltersLoading(false);
@@ -226,6 +229,7 @@ function GlobalRankingsContent() {
 
   // Fetch rankings whenever scope/country/state changes
   useEffect(() => {
+    console.log("[Rankings] Fetching rankings with scope:", scope, "country:", selectedCountry, "state:", selectedState);
     async function fetchRankings() {
       setLoading(true);
       setError(null);
@@ -236,12 +240,16 @@ function GlobalRankingsContent() {
           if (selectedCountry) params.country = selectedCountry;
           if (scope === "state" && selectedState) params.state = selectedState;
         }
+        console.log("[Rankings] API params:", params);
         const result = await rankingsApi.getGlobalEPA(
           scope === "global" ? undefined : params
         );
+        console.log("[Rankings] API response success:", result.success, "teams count:", result.data?.rankings?.length);
         if (result.success && result.data) {
           setData(result.data);
+          console.log("[Rankings] Data set successfully. Total teams:", result.data.totalTeams, "Last updated:", result.data.lastUpdated);
         } else {
+          console.error("[Rankings] API returned error:", result.error);
           setError(result.error || "Failed to load rankings data.");
         }
       } catch (err) {
@@ -253,8 +261,14 @@ function GlobalRankingsContent() {
     }
 
     // Don't fetch if country scope but no country selected, or state scope but missing params
-    if (scope === "country" && !selectedCountry) return;
-    if (scope === "state" && (!selectedCountry || !selectedState)) return;
+    if (scope === "country" && !selectedCountry) {
+      console.log("[Rankings] Skipping fetch - country scope but no country selected");
+      return;
+    }
+    if (scope === "state" && (!selectedCountry || !selectedState)) {
+      console.log("[Rankings] Skipping fetch - state scope but missing country or state");
+      return;
+    }
 
     fetchRankings();
   }, [scope, selectedCountry, selectedState]);
@@ -267,6 +281,7 @@ function GlobalRankingsContent() {
         matched.add(t.teamNumber);
       }
     });
+    console.log("[Rankings] Team filter applied. Found matches:", matched.size, "for filter:", teamFilter.trim());
     return matched;
   }, [data, teamFilter]);
 
@@ -281,6 +296,7 @@ function GlobalRankingsContent() {
         }
       }
     });
+    console.log("[Rankings] Filtered rankings calculated. Returned", matchedIndices.size, "team entries");
     return data.rankings.filter((_, i) => matchedIndices.has(i));
   }, [data, teamFilter]);
 
@@ -292,21 +308,27 @@ function GlobalRankingsContent() {
 
   // Reset visible count when filter changes
   useEffect(() => {
+    console.log("[Rankings] Filter changed - resetting visible count. teamFilter:", teamFilter, "scope:", scope);
     setVisibleCount(LOAD_INCREMENT);
   }, [teamFilter, scope, selectedCountry, selectedState]);
 
   // Infinite scroll: auto-load when sentinel enters viewport
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadMore = useCallback(() => {
+    console.log("[Rankings] Loading more teams. Current visibleCount:", visibleCount, "→", visibleCount + LOAD_INCREMENT);
     setVisibleCount((prev) => prev + LOAD_INCREMENT);
-  }, []);
+  }, [visibleCount]);
 
   useEffect(() => {
+    console.log("[Rankings] Setting up infinite scroll observer");
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) loadMore();
+        if (entries[0].isIntersecting) {
+          console.log("[Rankings] Sentinel intersected - triggering loadMore");
+          loadMore();
+        }
       },
       { rootMargin: "200px" }
     );
