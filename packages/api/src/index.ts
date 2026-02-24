@@ -43,7 +43,7 @@ app.use(
       return "";
     },
     credentials: true,
-    allowHeaders: ["Content-Type", "Authorization", "X-User-Id", "X-API-Key"],
+    allowHeaders: ["Content-Type", "Authorization", "User-Id"],
   })
 );
 

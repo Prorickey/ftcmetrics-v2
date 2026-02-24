@@ -247,7 +247,7 @@ export async function syncPendingEntries(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": entry.userId,
+          "User-Id": entry.userId,
         },
         credentials: "include",
         body: JSON.stringify(entry.data),

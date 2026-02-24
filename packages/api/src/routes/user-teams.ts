@@ -36,7 +36,7 @@ function generateInviteCode(): string {
  * Get all teams the current user is a member of
  */
 userTeams.get("/", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
 
   if (!userId) {
     return c.json({ success: false, error: "Unauthorized" }, 401);
@@ -70,7 +70,7 @@ userTeams.get("/", async (c) => {
  * Create a new team (claim an FTC team number)
  */
 userTeams.post("/", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
 
   if (!userId) {
     return c.json({ success: false, error: "Unauthorized" }, 401);
@@ -143,7 +143,7 @@ userTeams.post("/", async (c) => {
  * Get a specific team's details
  */
 userTeams.get("/:teamId", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const teamId = c.req.param("teamId");
 
   if (!userId) {
@@ -211,7 +211,7 @@ userTeams.get("/:teamId", async (c) => {
  * Update team settings (MENTOR/LEADER only)
  */
 userTeams.patch("/:teamId", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const teamId = c.req.param("teamId");
 
   if (!userId) {
@@ -294,7 +294,7 @@ userTeams.patch("/:teamId", async (c) => {
  * Create an invite code (MENTOR/LEADER only)
  */
 userTeams.post("/:teamId/invites", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const teamId = c.req.param("teamId");
 
   if (!userId) {
@@ -359,7 +359,7 @@ userTeams.post("/:teamId/invites", async (c) => {
  * Join a team using an invite code
  */
 userTeams.post("/join", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
 
   if (!userId) {
     return c.json({ success: false, error: "Unauthorized" }, 401);
@@ -439,7 +439,7 @@ userTeams.post("/join", async (c) => {
  * Remove a member from team (MENTOR/LEADER only, or self)
  */
 userTeams.delete("/:teamId/members/:memberId", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const teamId = c.req.param("teamId");
   const memberId = c.req.param("memberId");
 
@@ -511,7 +511,7 @@ userTeams.delete("/:teamId/members/:memberId", async (c) => {
  * Update member role (MENTOR/LEADER only, or updating own role)
  */
 userTeams.patch("/:teamId/members/:memberId", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const teamId = c.req.param("teamId");
   const memberId = c.req.param("memberId");
 
@@ -598,7 +598,7 @@ userTeams.patch("/:teamId/members/:memberId", async (c) => {
  * Supports multipart/form-data for file uploads (PHOTO/VIDEO) and JSON for URL-based media
  */
 userTeams.post("/:teamId/media", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const teamId = c.req.param("teamId");
 
   if (!userId) {
@@ -756,7 +756,7 @@ userTeams.post("/:teamId/media", async (c) => {
  * Update a media item (MENTOR/LEADER only)
  */
 userTeams.patch("/:teamId/media/:mediaId", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const teamId = c.req.param("teamId");
   const mediaId = c.req.param("mediaId");
 
@@ -811,7 +811,7 @@ userTeams.patch("/:teamId/media/:mediaId", async (c) => {
  * Delete a media item (MENTOR/LEADER only)
  */
 userTeams.delete("/:teamId/media/:mediaId", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const teamId = c.req.param("teamId");
   const mediaId = c.req.param("mediaId");
 

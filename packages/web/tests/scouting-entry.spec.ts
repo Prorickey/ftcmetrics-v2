@@ -49,7 +49,7 @@ test.describe("Scouting Entry Submission", () => {
       {
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": TEST_USER_ID,
+          "User-Id": TEST_USER_ID,
         },
         data: scoutingPayload,
       }
@@ -114,7 +114,7 @@ test.describe("Scouting Entry Submission", () => {
       {
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": TEST_USER_ID,
+          "User-Id": TEST_USER_ID,
         },
         data: {
           // Intentionally omit all required fields
@@ -138,7 +138,7 @@ test.describe("Scouting Entry Submission", () => {
       {
         headers: {
           "Content-Type": "application/json",
-          // No X-User-Id header
+          // No User-Id header
         },
         data: scoutingPayload,
       }

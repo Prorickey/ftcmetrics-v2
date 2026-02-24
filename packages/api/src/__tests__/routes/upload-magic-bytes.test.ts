@@ -82,7 +82,7 @@ describe("File upload magic byte validation", () => {
       method: "POST",
       headers: {
         Cookie: "authjs.session-token=valid-token",
-        "X-User-Id": USER_ID,
+        "User-Id": USER_ID,
       },
       body: form,
     });
@@ -98,7 +98,7 @@ describe("File upload magic byte validation", () => {
       method: "POST",
       headers: {
         Cookie: "authjs.session-token=valid-token",
-        "X-User-Id": USER_ID,
+        "User-Id": USER_ID,
       },
       body: form,
     });
@@ -113,7 +113,7 @@ describe("File upload magic byte validation", () => {
       method: "POST",
       headers: {
         Cookie: "authjs.session-token=valid-token",
-        "X-User-Id": USER_ID,
+        "User-Id": USER_ID,
       },
       body: form,
     });
@@ -128,7 +128,7 @@ describe("File upload magic byte validation", () => {
       method: "POST",
       headers: {
         Cookie: "authjs.session-token=valid-token",
-        "X-User-Id": USER_ID,
+        "User-Id": USER_ID,
       },
       body: form,
     });
@@ -144,7 +144,7 @@ describe("File upload magic byte validation", () => {
       method: "POST",
       headers: {
         Cookie: "authjs.session-token=valid-token",
-        "X-User-Id": USER_ID,
+        "User-Id": USER_ID,
       },
       body: form,
     });
