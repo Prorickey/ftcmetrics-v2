@@ -1,4 +1,5 @@
 import { Context, Next } from "hono";
+import { createHash } from "crypto";
 import { prisma } from "@ftcmetrics/db";
 import { getRedis } from "../lib/redis";
 
@@ -24,6 +25,28 @@ function getSessionToken(c: Context): string | undefined {
     cookies["__Secure-authjs.session-token"] ||
     cookies["authjs.session-token"]
   );
+}
+
+/**
+ * Extract a Bearer token from the Authorization header.
+ * Only returns the token if it starts with "ftcm_".
+ */
+function getBearerToken(c: Context): string | undefined {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return undefined;
+
+  const match = authHeader.match(/^Bearer (.+)$/);
+  if (!match) return undefined;
+
+  const token = match[1];
+  return token.startsWith("ftcm_") ? token : undefined;
+}
+
+/**
+ * Returns the SHA-256 hex digest of a given string.
+ */
+export function hashApiKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
 }
 
 /**
@@ -85,7 +108,8 @@ export async function authMiddleware(c: Context, next: Next) {
 }
 
 /**
- * Optional auth middleware - doesn't require auth but attaches user if present
+ * Optional auth middleware - doesn't require auth but attaches user if present.
+ * Supports both NextAuth session cookies and Bearer API key tokens.
  */
 export async function optionalAuthMiddleware(c: Context, next: Next) {
   const sessionToken = getSessionToken(c);
@@ -113,9 +137,77 @@ export async function optionalAuthMiddleware(c: Context, next: Next) {
       // Continue without auth on error
       console.error("Optional auth middleware error:", error);
     }
+  } else {
+    // No session found — try Bearer token auth
+    const bearerToken = getBearerToken(c);
+
+    if (bearerToken) {
+      try {
+        const keyHash = hashApiKey(bearerToken);
+        const apiKey = await prisma.apiKey.findUnique({
+          where: { keyHash },
+        });
+
+        if (
+          apiKey &&
+          apiKey.revokedAt === null &&
+          (apiKey.expiresAt === null || apiKey.expiresAt > new Date())
+        ) {
+          c.set("userId", apiKey.userId);
+
+          const user = await prisma.user.findUnique({
+            where: { id: apiKey.userId },
+            select: { id: true, name: true, email: true },
+          });
+
+          if (user) {
+            c.set("user", user);
+          }
+
+          c.set("apiKeyScopes", apiKey.scopes);
+
+          // Fire-and-forget lastUsedAt update
+          prisma.apiKey
+            .update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } })
+            .catch(() => {});
+        }
+      } catch (error) {
+        // Continue without auth on error
+        console.error("Bearer token auth error:", error);
+      }
+    }
   }
 
   await next();
+}
+
+/**
+ * Scope-based authorization middleware factory.
+ * Session users are always allowed through. API key users must have the required scope.
+ */
+export function requireScope(scope: string) {
+  return async (c: Context, next: Next) => {
+    const apiKeyScopes: string[] | undefined = c.get("apiKeyScopes");
+
+    // Session-authenticated user — no scope restriction
+    if (!apiKeyScopes) {
+      await next();
+      return;
+    }
+
+    // API key user — verify scope is present
+    if (!apiKeyScopes.includes(scope)) {
+      return c.json(
+        {
+          success: false,
+          error: `Insufficient scope. Required: ${scope}`,
+        },
+        403
+      );
+    }
+
+    await next();
+  };
 }
 
 /**
