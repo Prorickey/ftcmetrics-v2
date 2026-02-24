@@ -193,13 +193,13 @@ export default function MyTeamsPage() {
         </div>
         <div className="flex gap-3">
           <Link
-            href="/my-teams/join"
+            href="/teams/join"
             className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Join Team
           </Link>
           <Link
-            href="/my-teams/create"
+            href="/teams/create"
             className="px-4 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
           >
             Create Team
@@ -235,13 +235,13 @@ export default function MyTeamsPage() {
           </p>
           <div className="flex justify-center gap-3">
             <Link
-              href="/my-teams/join"
+              href="/teams/join"
               className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Join with Code
             </Link>
             <Link
-              href="/my-teams/create"
+              href="/teams/create"
               className="px-4 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
             >
               Create Team
@@ -253,7 +253,7 @@ export default function MyTeamsPage() {
           {teams.map(({ teamId, role, team }) => (
             <Link
               key={teamId}
-              href={`/my-teams/${teamId}`}
+              href={`/teams/${teamId}`}
               className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:border-ftc-orange dark:hover:border-ftc-orange transition-colors"
             >
               <div className="flex items-center justify-between">

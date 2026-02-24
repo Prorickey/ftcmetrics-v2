@@ -138,7 +138,7 @@ export default function TeamDetailPage() {
   };
 
   const copyInviteLink = async (code: string) => {
-    const link = `${window.location.origin}/my-teams/join?code=${code}`;
+    const link = `${window.location.origin}/teams/join?code=${code}`;
     await navigator.clipboard.writeText(link);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
@@ -217,7 +217,7 @@ export default function TeamDetailPage() {
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
           <p className="text-red-600 dark:text-red-400">{error || "Team not found"}</p>
           <Link
-            href="/my-teams"
+            href="/teams"
             className="mt-4 inline-block text-ftc-orange hover:underline"
           >
             Back to My Teams
@@ -232,7 +232,7 @@ export default function TeamDetailPage() {
       {/* Header */}
       <div className="mb-8">
         <Link
-          href="/my-teams"
+          href="/teams"
           className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-2 mb-4"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

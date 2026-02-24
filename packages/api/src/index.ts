@@ -21,6 +21,7 @@ import analytics from "./routes/analytics";
 import rankings from "./routes/rankings";
 import { computeAndCacheRankings } from "./routes/rankings";
 import apiKeys from "./routes/api-keys";
+import users from "./routes/users";
 
 // Import middleware
 import { authMiddleware, optionalAuthMiddleware, rateLimit, sanitizeInput, requireScope } from "./middleware/auth";
@@ -42,7 +43,7 @@ app.use(
       return "";
     },
     credentials: true,
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "X-User-Id", "X-API-Key"],
   })
 );
 
@@ -159,6 +160,9 @@ app.use("/api/rankings/*", requireScope("rankings:read"));
 // API key management (session-only)
 app.use("/api/api-keys/*", authMiddleware);
 
+// User profile management (session-only)
+app.use("/api/users/*", authMiddleware);
+
 // Mount routes
 app.route("/api/events", events);
 app.route("/api/teams", teams);
@@ -167,6 +171,7 @@ app.route("/api/scouting", scouting);
 app.route("/api/analytics", analytics);
 app.route("/api/rankings", rankings);
 app.route("/api/api-keys", apiKeys);
+app.route("/api/users", users);
 
 // Start server
 const port = parseInt(process.env.PORT || "3001", 10);

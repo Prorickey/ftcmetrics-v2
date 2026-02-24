@@ -95,7 +95,7 @@ export default async function DashboardPage() {
         </Link>
 
         <Link
-          href="/my-teams"
+          href="/teams"
           className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-green-500 dark:hover:border-green-500 transition-colors group"
         >
           <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-500/20 transition-colors">
@@ -141,34 +141,6 @@ export default async function DashboardPage() {
           <h3 className="font-semibold text-lg mb-1">Rankings</h3>
           <p className="text-gray-600 dark:text-gray-400 text-sm">
             Global EPA leaderboard
-          </p>
-        </Link>
-      </div>
-
-      {/* Developer Tools */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        <Link
-          href="/dashboard/api-keys"
-          className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-ftc-orange dark:hover:border-ftc-orange transition-colors group"
-        >
-          <div className="w-12 h-12 bg-ftc-orange/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-ftc-orange/20 transition-colors">
-            <svg
-              className="w-6 h-6 text-ftc-orange"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-              />
-            </svg>
-          </div>
-          <h3 className="font-semibold text-lg mb-1">API Keys</h3>
-          <p className="text-gray-600 dark:text-gray-400 text-sm">
-            Manage programmatic access
           </p>
         </Link>
       </div>

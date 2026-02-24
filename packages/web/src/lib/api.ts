@@ -650,6 +650,27 @@ export const rankingsApi = {
   },
 };
 
+// Users API (profile management)
+export const usersApi = {
+  updateProfile: async (data: { name?: string; image?: string | null }) => {
+    return fetchApi<{
+      id: string;
+      name: string;
+      image: string | null;
+      email: string;
+    }>("/users/me", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteAccount: async () => {
+    return fetchApi("/users/me", {
+      method: "DELETE",
+    });
+  },
+};
+
 // Analytics API
 export interface OPRResult {
   teamNumber: number;

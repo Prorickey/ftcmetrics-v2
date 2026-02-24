@@ -37,7 +37,7 @@ function JoinTeamForm() {
       const result = await teamsApi.joinTeam(session.user.id, code.trim());
 
       if (result.success && result.data) {
-        router.push(`/my-teams/${result.data.teamId}`);
+        router.push(`/teams/${result.data.teamId}`);
       } else {
         setError(result.error || "Failed to join team");
       }
@@ -93,7 +93,7 @@ export default function JoinTeamPage() {
     <div className="max-w-lg mx-auto">
       <div className="mb-8">
         <Link
-          href="/my-teams"
+          href="/teams"
           className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-2 mb-4"
         >
           <svg
@@ -132,7 +132,7 @@ export default function JoinTeamPage() {
           Don&apos;t have a team?
         </p>
         <Link
-          href="/my-teams/create"
+          href="/teams/create"
           className="text-ftc-orange hover:underline font-medium"
         >
           Create a new team

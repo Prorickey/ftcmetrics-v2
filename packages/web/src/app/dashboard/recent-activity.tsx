@@ -183,7 +183,7 @@ export function RecentActivity() {
           </svg>
           <p>Join a team to start scouting</p>
           <Link
-            href="/my-teams"
+            href="/teams"
             className="mt-4 inline-block px-4 py-2 bg-ftc-orange text-white rounded-lg text-sm font-medium hover:opacity-90"
           >
             Join or Create Team

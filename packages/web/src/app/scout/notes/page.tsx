@@ -267,7 +267,7 @@ function NotesContent() {
           You need to be part of a team to view and submit scouting notes
         </p>
         <Link
-          href="/my-teams"
+          href="/teams"
           className="px-4 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90"
         >
           My Teams
