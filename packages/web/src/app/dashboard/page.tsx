@@ -95,7 +95,7 @@ export default async function DashboardPage() {
         </Link>
 
         <Link
-          href="/my-teams"
+          href="/teams"
           className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-green-500 dark:hover:border-green-500 transition-colors group"
         >
           <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-500/20 transition-colors">

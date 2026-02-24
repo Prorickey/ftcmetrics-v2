@@ -20,9 +20,11 @@ import scouting from "./routes/scouting";
 import analytics from "./routes/analytics";
 import rankings from "./routes/rankings";
 import { computeAndCacheRankings } from "./routes/rankings";
+import apiKeys from "./routes/api-keys";
+import users from "./routes/users";
 
 // Import middleware
-import { authMiddleware, optionalAuthMiddleware, rateLimit, sanitizeInput } from "./middleware/auth";
+import { authMiddleware, optionalAuthMiddleware, rateLimit, sanitizeInput, requireScope } from "./middleware/auth";
 
 // Create the main app
 const app = new Hono();
@@ -41,6 +43,7 @@ app.use(
       return "";
     },
     credentials: true,
+    allowHeaders: ["Content-Type", "Authorization", "User-Id"],
   })
 );
 
@@ -142,11 +145,23 @@ app.get("/api/health", async (c) => {
 app.use("/api/user-teams/*", authMiddleware);
 app.use("/api/scouting/*", authMiddleware);
 
-// Optional auth for public routes (attaches user if session present)
+// Optional auth for public routes (attaches user if session present, or API key)
 app.use("/api/events/*", optionalAuthMiddleware);
 app.use("/api/teams/*", optionalAuthMiddleware);
 app.use("/api/analytics/*", optionalAuthMiddleware);
 app.use("/api/rankings/*", optionalAuthMiddleware);
+
+// Scope enforcement for API key users
+app.use("/api/events/*", requireScope("events:read"));
+app.use("/api/teams/*", requireScope("teams:read"));
+app.use("/api/analytics/*", requireScope("analytics:read"));
+app.use("/api/rankings/*", requireScope("rankings:read"));
+
+// API key management (session-only)
+app.use("/api/api-keys/*", authMiddleware);
+
+// User profile management (session-only)
+app.use("/api/users/*", authMiddleware);
 
 // Mount routes
 app.route("/api/events", events);
@@ -155,6 +170,8 @@ app.route("/api/user-teams", userTeams);
 app.route("/api/scouting", scouting);
 app.route("/api/analytics", analytics);
 app.route("/api/rankings", rankings);
+app.route("/api/api-keys", apiKeys);
+app.route("/api/users", users);
 
 // Start server
 const port = parseInt(process.env.PORT || "3001", 10);

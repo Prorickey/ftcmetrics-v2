@@ -94,7 +94,7 @@ describe("Scouting route auth", () => {
       headers: {
         "Content-Type": "application/json",
         Cookie: "authjs.session-token=valid-token",
-        "X-User-Id": USER_ID,
+        "User-Id": USER_ID,
       },
       body: JSON.stringify(validPayload()),
     });
@@ -117,7 +117,7 @@ describe("Scouting route auth", () => {
       headers: {
         "Content-Type": "application/json",
         Cookie: "authjs.session-token=valid-token",
-        "X-User-Id": USER_ID,
+        "User-Id": USER_ID,
       },
       body: JSON.stringify(validPayload()),
     });
@@ -153,7 +153,7 @@ describe("Scouting route auth", () => {
       headers: {
         "Content-Type": "application/json",
         Cookie: "authjs.session-token=valid-token",
-        "X-User-Id": USER_ID,
+        "User-Id": USER_ID,
       },
       body: JSON.stringify(validPayload()),
     });

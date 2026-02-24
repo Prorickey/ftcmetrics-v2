@@ -45,7 +45,7 @@ export function Header() {
               Rankings
             </Link>
             <Link
-              href="/my-teams"
+              href="/teams"
               className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               Teams
@@ -86,11 +86,18 @@ export function Header() {
                       </p>
                     </div>
                     <Link
-                      href="/my-teams"
+                      href="/teams"
                       className="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
                       onClick={() => setMenuOpen(false)}
                     >
-                      My Teams
+                      Teams
+                    </Link>
+                    <Link
+                      href="/dashboard/settings"
+                      className="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Settings
                     </Link>
                     <button
                       onClick={() => signOut({ callbackUrl: "/" })}

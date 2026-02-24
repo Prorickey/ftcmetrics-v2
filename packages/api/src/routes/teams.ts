@@ -248,7 +248,7 @@ teams.get("/:teamNumber/profile", async (c) => {
     }
 
     // Check visibility
-    const requesterId = c.req.header("X-User-Id");
+    const requesterId = c.req.header("User-Id");
     const isMember = requesterId
       ? team.members.some((m) => m.userId === requesterId)
       : false;

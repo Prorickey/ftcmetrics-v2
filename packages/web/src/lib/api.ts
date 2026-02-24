@@ -55,7 +55,7 @@ export const teamsApi = {
         sharingLevel: string;
       };
     }>>(`/user-teams`, {
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
     });
   },
 
@@ -66,7 +66,7 @@ export const teamsApi = {
       name: string;
     }>("/user-teams", {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -112,7 +112,7 @@ export const teamsApi = {
         mimeType: string | null;
       }>;
     }>(`/user-teams/${teamId}`, {
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
     });
   },
 
@@ -131,7 +131,7 @@ export const teamsApi = {
   ) => {
     return fetchApi(`/user-teams/${teamId}`, {
       method: "PATCH",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -147,7 +147,7 @@ export const teamsApi = {
       expiresAt: string | null;
     }>(`/user-teams/${teamId}/invites`, {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -158,7 +158,7 @@ export const teamsApi = {
       role: string;
     }>("/user-teams/join", {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify({ code }),
     });
   },
@@ -171,7 +171,7 @@ export const teamsApi = {
   ) => {
     return fetchApi(`/user-teams/${teamId}/members/${memberId}`, {
       method: "PATCH",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -179,14 +179,14 @@ export const teamsApi = {
   removeMember: async (userId: string, teamId: string, memberId: string) => {
     return fetchApi(`/user-teams/${teamId}/members/${memberId}`, {
       method: "DELETE",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
     });
   },
 
   leaveTeam: async (userId: string, teamId: string) => {
     return fetchApi(`/user-teams/${teamId}/leave`, {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
     });
   },
 
@@ -207,7 +207,7 @@ export const teamsApi = {
       mimeType: string | null;
     }>(`/user-teams/${teamId}/media`, {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -226,7 +226,7 @@ export const teamsApi = {
     const url = `${API_URL}/user-teams/${teamId}/media`;
     const response = await fetch(url, {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: formData,
       credentials: "include",
     });
@@ -251,7 +251,7 @@ export const teamsApi = {
   ) => {
     return fetchApi(`/user-teams/${teamId}/media/${mediaId}`, {
       method: "PATCH",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -259,7 +259,7 @@ export const teamsApi = {
   removeMedia: async (userId: string, teamId: string, mediaId: string) => {
     return fetchApi(`/user-teams/${teamId}/media/${mediaId}`, {
       method: "DELETE",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
     });
   },
 };
@@ -289,7 +289,7 @@ export const scoutingApi = {
   ) => {
     return fetchApi("/scouting/entries", {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -314,7 +314,7 @@ export const scoutingApi = {
       params.set("offset", String(offset));
       // API returns { success, data: [...], total }
       const result = await fetchApi<unknown[]>(`/scouting/entries?${params.toString()}`, {
-        headers: { "X-User-Id": userId },
+        headers: { "User-Id": userId },
       }) as ApiResponse<unknown[]> & { total?: number };
       if (!result.success || !result.data) break;
       allEntries.push(...result.data);
@@ -346,7 +346,7 @@ export const scoutingApi = {
   ) => {
     return fetchApi(`/scouting/entries/${entryId}`, {
       method: "PATCH",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -387,7 +387,7 @@ export const scoutingApi = {
   ) => {
     return fetchApi("/scouting/notes", {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -413,7 +413,7 @@ export const scoutingApi = {
       const params = new URLSearchParams(baseParams);
       params.set("offset", String(offset));
       const result = await fetchApi<unknown[]>(`/scouting/notes?${params.toString()}`, {
-        headers: { "X-User-Id": userId },
+        headers: { "User-Id": userId },
       }) as ApiResponse<unknown[]> & { total?: number };
       if (!result.success || !result.data) break;
       allNotes.push(...result.data);
@@ -431,14 +431,14 @@ export const scoutingApi = {
       teamsScoutedCount: number;
       notesCount: number;
     }>(`/scouting/team-stats/${teamId}`, {
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
     });
   },
 
   deductPartner: async (userId: string, entryId: string) => {
     return fetchApi(`/scouting/entries/${entryId}/deduct-partner`, {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
     });
   },
 
@@ -453,7 +453,7 @@ export const scoutingApi = {
       total: number;
     }>("/scouting/retry-deductions", {
       method: "POST",
-      headers: { "X-User-Id": userId },
+      headers: { "User-Id": userId },
       body: JSON.stringify(data),
     });
   },
@@ -550,7 +550,7 @@ export const ftcTeamsApi = {
         mimeType: string | null;
       }>;
     } | null>(`/teams/${teamNumber}/profile`, {
-      headers: userId ? { "X-User-Id": userId } : {},
+      headers: userId ? { "User-Id": userId } : {},
     });
   },
 
@@ -647,6 +647,27 @@ export const rankingsApi = {
       teleopOprStateRank: number | null;
       endgameOprStateRank: number | null;
     }>(`/rankings/team/${teamNumber}`);
+  },
+};
+
+// Users API (profile management)
+export const usersApi = {
+  updateProfile: async (data: { name?: string; image?: string | null }) => {
+    return fetchApi<{
+      id: string;
+      name: string;
+      image: string | null;
+      email: string;
+    }>("/users/me", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteAccount: async () => {
+    return fetchApi("/users/me", {
+      method: "DELETE",
+    });
   },
 };
 

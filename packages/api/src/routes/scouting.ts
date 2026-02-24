@@ -345,7 +345,7 @@ async function performAllianceDeduction(entryId: string): Promise<{
  * Submit a new scouting entry
  */
 scouting.post("/entries", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
 
   if (!userId) {
     return c.json({ success: false, error: "Unauthorized" }, 401);
@@ -505,7 +505,7 @@ scouting.post("/entries", async (c) => {
  * Get scouting entries with filters
  */
 scouting.get("/entries", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const scoutingTeamId = c.req.query("scoutingTeamId");
 
   // Require authentication or a scoutingTeamId filter
@@ -592,7 +592,7 @@ scouting.get("/entries", async (c) => {
  * Get a specific scouting entry
  */
 scouting.get("/entries/:id", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const id = c.req.param("id");
 
   if (!userId) {
@@ -648,7 +648,7 @@ scouting.get("/entries/:id", async (c) => {
  * Update an existing scouting entry
  */
 scouting.patch("/entries/:id", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const id = c.req.param("id");
 
   if (!userId) {
@@ -749,7 +749,7 @@ scouting.patch("/entries/:id", async (c) => {
  * the scouted robot's scores from the FTC API alliance totals.
  */
 scouting.post("/entries/:id/deduct-partner", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const id = c.req.param("id");
 
   if (!userId) {
@@ -808,7 +808,7 @@ scouting.post("/entries/:id/deduct-partner", async (c) => {
  * Called automatically when match data may have become available.
  */
 scouting.post("/retry-deductions", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
 
   if (!userId) {
     return c.json({ success: false, error: "Unauthorized" }, 401);
@@ -875,7 +875,7 @@ scouting.post("/retry-deductions", async (c) => {
  * Add a qualitative note about a team
  */
 scouting.post("/notes", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
 
   if (!userId) {
     return c.json({ success: false, error: "Unauthorized" }, 401);
@@ -1020,7 +1020,7 @@ scouting.post("/notes", async (c) => {
  * Get scouting notes with filters
  */
 scouting.get("/notes", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
 
   if (!userId) {
     return c.json({ success: false, error: "Unauthorized" }, 401);
@@ -1103,7 +1103,7 @@ scouting.get("/notes", async (c) => {
  * Get aggregated scouting data for a team
  */
 scouting.get("/team-summary/:teamNumber", async (c) => {
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
   const teamNumber = parseInt(c.req.param("teamNumber"), 10);
   const eventCode = c.req.query("eventCode");
 
@@ -1201,7 +1201,7 @@ scouting.get("/team-summary/:teamNumber", async (c) => {
  */
 scouting.get("/team-stats/:teamId", async (c) => {
   const teamId = c.req.param("teamId");
-  const userId = c.req.header("X-User-Id");
+  const userId = c.req.header("User-Id");
 
   if (!userId) {
     return c.json({ success: false, error: "Unauthorized" }, 401);

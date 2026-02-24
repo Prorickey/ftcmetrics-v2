@@ -2,7 +2,8 @@
   "name": "ftcmetrics-v2",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "sdks/typescript"
   ],
   "scripts": {
     "dev": "bun run --filter '*' dev",
@@ -15,7 +16,9 @@
     "db:push": "bun run --filter @ftcmetrics/db push",
     "db:migrate": "bun run --filter @ftcmetrics/db migrate",
     "db:studio": "bun run --filter @ftcmetrics/db studio",
-    "test": "bun run --filter '*' test"
+    "test": "bun run --filter '*' test",
+    "sdk:build": "bun run --filter ftcmetrics build",
+    "sdk:test": "bun run --filter ftcmetrics test"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

@@ -16,7 +16,7 @@ function authHeaders(extra: Record<string, string> = {}) {
   return {
     "Content-Type": "application/json",
     Cookie: "authjs.session-token=valid-token",
-    "X-User-Id": USER_ID,
+    "User-Id": USER_ID,
     ...extra,
   };
 }
@@ -196,7 +196,7 @@ describe("User teams auth and role enforcement", () => {
     const app = await createApp();
     const res = await app.request(`/api/user-teams/${TEAM_ID}/members/${MEMBER_ID}`, {
       method: "DELETE",
-      headers: { Cookie: "authjs.session-token=valid-token", "X-User-Id": USER_ID },
+      headers: { Cookie: "authjs.session-token=valid-token", "User-Id": USER_ID },
     });
     expect(res.status).toBe(400);
     const json = await res.json();

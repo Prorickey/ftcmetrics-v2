@@ -758,13 +758,13 @@ function ScoutContent() {
         </p>
         <div className="flex justify-center gap-3">
           <Link
-            href="/my-teams/join"
+            href="/teams/join"
             className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Join Team
           </Link>
           <Link
-            href="/my-teams/create"
+            href="/teams/create"
             className="px-4 py-2 bg-ftc-orange text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
           >
             Create Team

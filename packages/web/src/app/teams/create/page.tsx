@@ -72,7 +72,7 @@ export default function CreateTeamPage() {
       });
 
       if (result.success && result.data) {
-        router.push(`/my-teams/${result.data.id}`);
+        router.push(`/teams/${result.data.id}`);
       } else {
         setError(result.error || "Failed to create team");
       }
@@ -87,7 +87,7 @@ export default function CreateTeamPage() {
     <div className="max-w-lg mx-auto">
       <div className="mb-8">
         <Link
-          href="/my-teams"
+          href="/teams"
           className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-2 mb-4"
         >
           <svg
